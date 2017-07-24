@@ -29,8 +29,9 @@ extern ClassAllocator<RemapPlugins> pluginAllocator;
 int
 RemapProcessor::start(int num_threads, size_t stacksize)
 {
-  if (_use_separate_remap_thread)
-    ET_REMAP = eventProcessor.spawn_event_threads(num_threads, "ET_REMAP", stacksize);  // ET_REMAP is a class member
+  if (_use_separate_remap_thread) {
+    ET_REMAP = eventProcessor.spawn_event_threads("ET_REMAP", num_threads, stacksize); // ET_REMAP is a class member
+  }
 
   return 0;
 }
@@ -46,10 +47,10 @@ bool
 RemapProcessor::setup_for_remap(HttpTransact::State *s)
 {
   Debug("url_rewrite", "setting up for remap: %p", s);
-  URL *request_url = NULL;
-  bool mapping_found = false;
+  URL *request_url        = nullptr;
+  bool mapping_found      = false;
   HTTPHdr *request_header = &s->hdr_info.client_request;
-  char **redirect_url = &s->remap_redirect;
+  char **redirect_url     = &s->remap_redirect;
   const char *request_host;
   int request_host_len;
   int request_port;
@@ -58,12 +59,10 @@ RemapProcessor::setup_for_remap(HttpTransact::State *s)
   s->reverse_proxy = rewrite_table->reverse_proxy;
   s->url_map.set(s->hdr_info.client_request.m_heap);
 
-  ink_assert(redirect_url != NULL);
+  ink_assert(redirect_url != nullptr);
 
-  if (unlikely((rewrite_table->num_rules_forward == 0) &&
-               (rewrite_table->num_rules_forward_with_recv_port == 0))) {
-    ink_assert(rewrite_table->forward_mappings.empty() &&
-               rewrite_table->forward_mappings_with_recv_port.empty());
+  if (unlikely((rewrite_table->num_rules_forward == 0) && (rewrite_table->num_rules_forward_with_recv_port == 0))) {
+    ink_assert(rewrite_table->forward_mappings.empty() && rewrite_table->forward_mappings_with_recv_port.empty());
     Debug("url_rewrite", "[lookup] No forward mappings found; Skipping...");
     return false;
   }
@@ -71,28 +70,27 @@ RemapProcessor::setup_for_remap(HttpTransact::State *s)
   // Since we are called before request validity checking
   // occurs, make sure that we have both a valid request
   // header and a valid URL
-  if (unlikely(!request_header || (request_url = request_header->url_get()) == NULL || !request_url->valid())) {
+  if (unlikely(!request_header || (request_url = request_header->url_get()) == nullptr || !request_url->valid())) {
     Error("NULL or invalid request data");
     return false;
   }
 
-  request_host = request_header->host_get(&request_host_len);
-  request_port = request_header->port_get();
-  proxy_request = request_header->is_target_in_url() || ! s->reverse_proxy;
+  request_host  = request_header->host_get(&request_host_len);
+  request_port  = request_header->port_get();
+  proxy_request = request_header->is_target_in_url() || !s->reverse_proxy;
 
   // Default to empty host.
   if (!request_host) {
-    request_host = "";
+    request_host     = "";
     request_host_len = 0;
   }
 
   Debug("url_rewrite", "[lookup] attempting %s lookup", proxy_request ? "proxy" : "normal");
 
   if (rewrite_table->num_rules_forward_with_recv_port) {
-    Debug("url_rewrite", "[lookup] forward mappings with recv port found; Using recv port %d",
-          s->client_info.port);
-    if (rewrite_table->forwardMappingWithRecvPortLookup(request_url, s->client_info.port,
-                                                         request_host, request_host_len, s->url_map)) {
+    Debug("url_rewrite", "[lookup] forward mappings with recv port found; Using recv port %d", s->client_info.dst_addr.port());
+    if (rewrite_table->forwardMappingWithRecvPortLookup(request_url, s->client_info.dst_addr.port(), request_host, request_host_len,
+                                                        s->url_map)) {
       Debug("url_rewrite", "Found forward mapping with recv port");
       mapping_found = true;
     } else if (rewrite_table->num_rules_forward == 0) {
@@ -118,7 +116,7 @@ RemapProcessor::setup_for_remap(HttpTransact::State *s)
 
     // Save this information for later
     // @amc: why is this done only for requests without a host in the URL?
-    s->hh_info.host_len = request_host_len;
+    s->hh_info.host_len     = request_host_len;
     s->hh_info.request_host = request_host;
     s->hh_info.request_port = request_port;
 
@@ -143,10 +141,10 @@ RemapProcessor::setup_for_remap(HttpTransact::State *s)
 bool
 RemapProcessor::finish_remap(HttpTransact::State *s)
 {
-  url_mapping *map = NULL;
+  url_mapping *map        = nullptr;
   HTTPHdr *request_header = &s->hdr_info.client_request;
-  URL *request_url = request_header->url_get();
-  char **redirect_url = &s->remap_redirect;
+  URL *request_url        = request_header->url_get();
+  char **redirect_url     = &s->remap_redirect;
   char host_hdr_buf[TS_MAX_HOST_NAME_LEN], tmp_referer_buf[4096], tmp_redirect_buf[4096], tmp_buf[2048], *c;
   const char *remapped_host;
   int remapped_host_len, remapped_port, tmp;
@@ -162,23 +160,25 @@ RemapProcessor::finish_remap(HttpTransact::State *s)
   rewrite_table->PerformACLFiltering(s, map);
 
   // Check referer filtering rules
-  if ((s->filter_mask & URL_REMAP_FILTER_REFERER) != 0 && (ri = map->referer_list) != 0) {
-    const char *referer_hdr = 0;
-    int referer_len = 0;
-    bool enabled_flag = map->optional_referer ? true : false;
+  if ((s->filter_mask & URL_REMAP_FILTER_REFERER) != 0 && (ri = map->referer_list) != nullptr) {
+    const char *referer_hdr = nullptr;
+    int referer_len         = 0;
+    bool enabled_flag       = map->optional_referer ? true : false;
 
     if (request_header->presence(MIME_PRESENCE_REFERER) &&
-        (referer_hdr = request_header->value_get(MIME_FIELD_REFERER, MIME_LEN_REFERER, &referer_len)) != NULL) {
-      if (referer_len >= (int) sizeof(tmp_referer_buf))
-        referer_len = (int) (sizeof(tmp_referer_buf) - 1);
+        (referer_hdr = request_header->value_get(MIME_FIELD_REFERER, MIME_LEN_REFERER, &referer_len)) != nullptr) {
+      if (referer_len >= (int)sizeof(tmp_referer_buf)) {
+        referer_len = (int)(sizeof(tmp_referer_buf) - 1);
+      }
       memcpy(tmp_referer_buf, referer_hdr, referer_len);
       tmp_referer_buf[referer_len] = 0;
       for (enabled_flag = false; ri; ri = ri->next) {
         if (ri->any) {
           enabled_flag = true;
-          if (!map->negative_referer)
+          if (!map->negative_referer) {
             break;
-        } else if (ri->regx_valid && (pcre_exec(ri->regx, NULL, tmp_referer_buf, referer_len, 0, 0, NULL, 0) != -1)) {
+          }
+        } else if (ri->regx_valid && (pcre_exec(ri->regx, nullptr, tmp_referer_buf, referer_len, 0, 0, nullptr, 0) != -1)) {
           enabled_flag = ri->negative ? false : true;
           break;
         }
@@ -191,42 +191,41 @@ RemapProcessor::finish_remap(HttpTransact::State *s)
           redirect_tag_str *rc;
           tmp_redirect_buf[(tmp = 0)] = 0;
           for (rc = map->redir_chunk_list; rc; rc = rc->next) {
-            c = 0;
+            c = nullptr;
             switch (rc->type) {
             case 's':
               c = rc->chunk_str;
               break;
             case 'r':
-              c = (referer_len && referer_hdr) ? &tmp_referer_buf[0] : 0;
+              c = (referer_len && referer_hdr) ? &tmp_referer_buf[0] : nullptr;
               break;
             case 'f':
             case 't':
               remapped_host = (rc->type == 'f') ?
-                map->fromURL.string_get_buf(tmp_buf, (int) sizeof(tmp_buf), &from_len) :
-                ((s->url_map).getToURL())->string_get_buf(tmp_buf, (int)sizeof(tmp_buf), &from_len);
+                                map->fromURL.string_get_buf(tmp_buf, (int)sizeof(tmp_buf), &from_len) :
+                                ((s->url_map).getToURL())->string_get_buf(tmp_buf, (int)sizeof(tmp_buf), &from_len);
               if (remapped_host && from_len > 0) {
                 c = &tmp_buf[0];
               }
               break;
             case 'o':
-              c = s->pristine_url.string_get_ref(NULL);
+              c = s->unmapped_url.string_get_ref(nullptr);
               break;
             };
 
-            if (c && tmp < (int) (sizeof(tmp_redirect_buf) - 1)) {
+            if (c && tmp < (int)(sizeof(tmp_redirect_buf) - 1)) {
               tmp += snprintf(&tmp_redirect_buf[tmp], sizeof(tmp_redirect_buf) - tmp, "%s", c);
             }
           }
           tmp_redirect_buf[sizeof(tmp_redirect_buf) - 1] = 0;
-          *redirect_url = ats_strdup(tmp_redirect_buf);
+          *redirect_url                                  = ats_strdup(tmp_redirect_buf);
         }
       } else {
         *redirect_url = ats_strdup(rewrite_table->http_default_redirect_url);
       }
 
-      if (*redirect_url == NULL) {
-        *redirect_url = ats_strdup(map->filter_redirect_url ? map->filter_redirect_url :
-                                   rewrite_table->http_default_redirect_url);
+      if (*redirect_url == nullptr) {
+        *redirect_url = ats_strdup(map->filter_redirect_url ? map->filter_redirect_url : rewrite_table->http_default_redirect_url);
       }
 
       return false;
@@ -240,18 +239,12 @@ RemapProcessor::finish_remap(HttpTransact::State *s)
   int host_len;
   const char *host_hdr = request_header->value_get(MIME_FIELD_HOST, MIME_LEN_HOST, &host_len);
 
-  if (request_url && host_hdr != NULL && s->txn_conf->maintain_pristine_host_hdr == 0) {
-    // Debug code to print out old host header.  This was easier before
-    //  the header conversion.  Now we have to copy to gain null
-    //  termination for the Debug() call
+  if (request_url && host_hdr != nullptr && s->txn_conf->maintain_pristine_host_hdr == 0) {
     if (is_debug_tag_set("url_rewrite")) {
       int old_host_hdr_len;
-      char *old_host_hdr = (char *) request_header->value_get(MIME_FIELD_HOST, MIME_LEN_HOST, &old_host_hdr_len);
-
+      char *old_host_hdr = (char *)request_header->value_get(MIME_FIELD_HOST, MIME_LEN_HOST, &old_host_hdr_len);
       if (old_host_hdr) {
-        old_host_hdr = ats_strndup(old_host_hdr, old_host_hdr_len);
         Debug("url_rewrite", "Host: Header before rewrite %.*s", old_host_hdr_len, old_host_hdr);
-        ats_free(old_host_hdr);
       }
     }
     //
@@ -265,9 +258,8 @@ RemapProcessor::finish_remap(HttpTransact::State *s)
       tmp = remapped_host_len;
       memcpy(host_hdr_buf, remapped_host, remapped_host_len);
       if (remapped_port) {
-        tmp += snprintf(host_hdr_buf + remapped_host_len, TS_MAX_HOST_NAME_LEN - remapped_host_len - 1,
-                        ":%d", remapped_port);
-    }
+        tmp += snprintf(host_hdr_buf + remapped_host_len, TS_MAX_HOST_NAME_LEN - remapped_host_len - 1, ":%d", remapped_port);
+      }
     } else {
       tmp = TS_MAX_HOST_NAME_LEN;
     }
@@ -295,15 +287,15 @@ RemapProcessor::perform_remap(Continuation *cont, HttpTransact::State *s)
 {
   Debug("url_rewrite", "Beginning RemapProcessor::perform_remap");
   HTTPHdr *request_header = &s->hdr_info.client_request;
-  URL *request_url = request_header->url_get();
-  url_mapping *map = s->url_map.getMapping();
-  host_hdr_info *hh_info = &(s->hh_info);
+  URL *request_url        = request_header->url_get();
+  url_mapping *map        = s->url_map.getMapping();
+  host_hdr_info *hh_info  = &(s->hh_info);
 
   if (!map) {
     Error("Could not find corresponding url_mapping for this transaction %p", s);
     Debug("url_rewrite", "Could not find corresponding url_mapping for this transaction");
     ink_assert(!"this should never happen -- call setup_for_remap first");
-    cont->handleEvent(EVENT_REMAP_ERROR, NULL);
+    cont->handleEvent(EVENT_REMAP_ERROR, nullptr);
     return ACTION_RESULT_DONE;
   }
 
@@ -317,7 +309,7 @@ RemapProcessor::perform_remap(Continuation *cont, HttpTransact::State *s)
 
     // Execute "inline" if not using separate remap threads.
     ink_assert(cont->mutex->thread_holding == this_ethread());
-    plugins->mutex = cont->mutex;
+    plugins->mutex  = cont->mutex;
     plugins->action = cont;
     SET_CONTINUATION_HANDLER(plugins, &RemapPlugins::run_remap);
     eventProcessor.schedule_imm(plugins, ET_REMAP);

@@ -1,12 +1,15 @@
 #
 # cache.config
 #
+# Documentation:
+#    https://docs.trafficserver.apache.org/en/latest/admin-guide/files/cache.config.en.html
+#
 # The purpose of this file is to alter caching parameters of
 #   specific objects or sets of objects
 #
 # Each line consists of a set of tag value pairs.  The pairs
 #   are in the format  <tag>=<value>
-# 
+#
 # Each line must include exactly one primary specifier
 #
 #   Primary destination specifiers are
@@ -27,6 +30,7 @@
 #     method=
 #     time=
 #     src_ip=
+#     internal={true,false}
 #
 # Each line must include exactly one cache directive
 #   Cache directives are
@@ -49,5 +53,5 @@
 #
 # Examples
 #
-#  Revalidate all http objects from www.example.com after 2 hours 
+#  Revalidate all http objects from www.example.com after 2 hours
 #    dest_domain=www.example.com   scheme=http  revalidate=2h

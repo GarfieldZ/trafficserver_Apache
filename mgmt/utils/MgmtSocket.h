@@ -24,13 +24,7 @@
 #ifndef _MGMT_SOCKET_H_
 #define _MGMT_SOCKET_H_
 
-#include "ink_platform.h"
-
-//-------------------------------------------------------------------------
-// defines
-//-------------------------------------------------------------------------
-
-#define MGMT_MAX_TRANSIENT_ERRORS 64
+#include "ts/ink_platform.h"
 
 //-------------------------------------------------------------------------
 // transient_error
@@ -46,13 +40,13 @@ bool mgmt_transient_error();
 // mgmt_accept
 //-------------------------------------------------------------------------
 
-int mgmt_accept(int s, struct sockaddr *addr, int *addrlen);
+int mgmt_accept(int s, struct sockaddr *addr, socklen_t *addrlen);
 
 //-------------------------------------------------------------------------
 // mgmt_fopen
 //-------------------------------------------------------------------------
 
-FILE * mgmt_fopen(const char *filename, const char *mode);
+FILE *mgmt_fopen(const char *filename, const char *mode);
 
 //-------------------------------------------------------------------------
 // mgmt_open
@@ -70,7 +64,7 @@ int mgmt_open_mode(const char *path, int oflag, mode_t mode);
 // mgmt_select
 //-------------------------------------------------------------------------
 
-int mgmt_select(int nfds, fd_set * readfds, fd_set * writefds, fd_set * errorfds, struct timeval *timeout);
+int mgmt_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *errorfds, struct timeval *timeout);
 
 //-------------------------------------------------------------------------
 // mgmt_sendto
@@ -93,5 +87,11 @@ int mgmt_write_timeout(int fd, int sec, int usec);
 // mgmt_read_timeout
 //-------------------------------------------------------------------------
 int mgmt_read_timeout(int fd, int sec, int usec);
+
+// Do we support passing Unix domain credentials on this platform?
+bool mgmt_has_peereid(void);
+
+// Get the Unix domain peer credentials.
+int mgmt_get_peereid(int fd, uid_t *euid, gid_t *egid);
 
 #endif // _MGMT_SOCKET_H_

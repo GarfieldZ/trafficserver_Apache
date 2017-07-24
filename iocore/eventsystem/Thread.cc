@@ -29,78 +29,87 @@
 
 **************************************************************************/
 #include "P_EventSystem.h"
+#include "ts/ink_string.h"
 
-  ///////////////////////////////////////////////
-  // Common Interface impl                     //
-  ///////////////////////////////////////////////
+///////////////////////////////////////////////
+// Common Interface impl                     //
+///////////////////////////////////////////////
 
-static ink_thread_key init_thread_key();
+ink_hrtime Thread::cur_time = ink_get_hrtime_internal();
+inkcoreapi ink_thread_key Thread::thread_data_key;
 
-ProxyMutex *global_mutex = NULL;
-ink_hrtime
-  Thread::cur_time = 0;
-inkcoreapi ink_thread_key
-  Thread::thread_data_key = init_thread_key();
+namespace
+{
+static bool initialized = ([]() -> bool {
+  // File scope initialization goes here.
+  ink_thread_key_create(&Thread::thread_data_key, nullptr);
+  return true;
+})();
+}
 
 Thread::Thread()
 {
   mutex = new_ProxyMutex();
-  mutex_ptr = mutex;
-  MUTEX_TAKE_LOCK(mutex, (EThread *) this);
-  mutex->nthread_holding = THREAD_MUTEX_THREAD_HOLDING;
+  MUTEX_TAKE_LOCK(mutex, (EThread *)this);
+  mutex->nthread_holding += THREAD_MUTEX_THREAD_HOLDING;
 }
 
-static void
-key_destructor(void *value)
+Thread::~Thread()
 {
-  (void) value;
+  ink_release_assert(mutex->thread_holding == (EThread *)this);
+  mutex->nthread_holding -= THREAD_MUTEX_THREAD_HOLDING;
+  MUTEX_UNTAKE_LOCK(mutex, (EThread *)this);
 }
 
-ink_thread_key
-init_thread_key()
-{
-  ink_thread_key_create(&Thread::thread_data_key, key_destructor);
-  return Thread::thread_data_key;
-}
+///////////////////////////////////////////////
+// Unix & non-NT Interface impl              //
+///////////////////////////////////////////////
 
-  ///////////////////////////////////////////////
-  // Unix & non-NT Interface impl              //
-  ///////////////////////////////////////////////
-
-struct thread_data_internal
-{
-  ThreadFunction f;
-  void *a;
-  Thread *me;
-  char name[MAX_THREAD_NAME_LENGTH];
+struct thread_data_internal {
+  ThreadFunction f;                  ///< Function to excecute in the thread.
+  Thread *me;                        ///< The class instance.
+  ink_mutex mutex;                   ///< Startup mutex.
+  char name[MAX_THREAD_NAME_LENGTH]; ///< Name for the thread.
 };
 
 static void *
 spawn_thread_internal(void *a)
 {
-  thread_data_internal *p = (thread_data_internal *) a;
+  auto *p = static_cast<thread_data_internal *>(a);
+
+  { // force wait until parent thread is ready.
+    ink_scoped_mutex_lock lock(p->mutex);
+  }
+  ink_mutex_destroy(&p->mutex);
 
   p->me->set_specific();
   ink_set_thread_name(p->name);
-  if (p->f)
-    p->f(p->a);
-  else
+
+  if (p->f) {
+    p->f();
+  } else {
     p->me->execute();
-  ats_free(a);
-  return NULL;
+  }
+
+  delete p;
+  return nullptr;
 }
 
 ink_thread
-Thread::start(const char* name, size_t stacksize, ThreadFunction f, void *a)
+Thread::start(const char *name, void *stack, size_t stacksize, ThreadFunction const &f)
 {
-  thread_data_internal *p = (thread_data_internal *)ats_malloc(sizeof(thread_data_internal));
+  auto *p = new thread_data_internal{f, this, {}, {0}};
 
-  p->f = f;
-  p->a = a;
-  p->me = this;
-  memset(p->name, 0, MAX_THREAD_NAME_LENGTH);
+  ink_zero(p->name);
   ink_strlcpy(p->name, name, MAX_THREAD_NAME_LENGTH);
-  tid = ink_thread_create(spawn_thread_internal, (void *) p, 0, stacksize);
+  ink_mutex_init(&p->mutex);
+  if (stacksize == 0) {
+    stacksize = DEFAULT_STACKSIZE;
+  }
+  { // must force assignment to complete before thread touches "this".
+    ink_scoped_mutex_lock lock(&p->mutex);
+    tid = ink_thread_create(spawn_thread_internal, p, 0, stacksize, stack);
+  }
 
   return tid;
 }

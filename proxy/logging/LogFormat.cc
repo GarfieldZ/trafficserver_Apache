@@ -26,16 +26,15 @@
 
 
  ***************************************************************************/
-#include "ink_config.h"
+#include "ts/ink_config.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
 
-#include "INK_MD5.h"
+#include "ts/INK_MD5.h"
 
-#include "Error.h"
-#include "SimpleTokenizer.h"
+#include "ts/SimpleTokenizer.h"
 
 #include "LogUtils.h"
 #include "LogFile.h"
@@ -59,30 +58,32 @@ bool LogFormat::m_tagging_on = false;
 bool
 LogFormat::setup(const char *name, const char *format_str, unsigned interval_sec)
 {
-  if (name == NULL) {
+  if (name == nullptr) {
     Note("missing log format name");
     return false;
   }
 
   if (format_str) {
-    const char *tag = " %<phn>";
+    const char *tag                = " %<phn>";
     const size_t m_format_str_size = strlen(format_str) + (m_tagging_on ? strlen(tag) : 0) + 1;
-    m_format_str = (char *)ats_malloc(m_format_str_size);
+    m_format_str                   = (char *)ats_malloc(m_format_str_size);
     ink_strlcpy(m_format_str, format_str, m_format_str_size);
     if (m_tagging_on) {
-      Note("Log tagging enabled, adding %%<phn> field at the end of " "format %s", name);
+      Note("Log tagging enabled, adding %%<phn> field at the end of "
+           "format %s",
+           name);
       ink_strlcat(m_format_str, tag, m_format_str_size);
     };
 
-    char *printf_str = NULL;
-    char *fieldlist_str = NULL;
-    int nfields = parse_format_string(m_format_str, &printf_str,
-                                      &fieldlist_str);
+    char *printf_str    = nullptr;
+    char *fieldlist_str = nullptr;
+    int nfields         = parse_format_string(m_format_str, &printf_str, &fieldlist_str);
     if (nfields > (m_tagging_on ? 1 : 0)) {
       init_variables(name, fieldlist_str, printf_str, interval_sec);
     } else {
       Note("Format %s encountered an error parsing the symbol string "
-           "\"%s\", symbol string contains no fields", ((name) ? name : "no-name"), format_str);
+           "\"%s\", symbol string contains no fields",
+           ((name) ? name : "no-name"), format_str);
       m_valid = false;
     }
 
@@ -102,7 +103,8 @@ LogFormat::setup(const char *name, const char *format_str, unsigned interval_sec
   LogFormat::id_from_name
   -------------------------------------------------------------------------*/
 
-int32_t LogFormat::id_from_name(const char *name)
+int32_t
+LogFormat::id_from_name(const char *name)
 {
   int32_t id = 0;
   if (name) {
@@ -114,9 +116,9 @@ int32_t LogFormat::id_from_name(const char *name)
      * This problem is only known to occur on Linux which
      * is a 32-bit OS.
      */
-    id = (int32_t) hash.fold() & 0x7fffffff;
+    id = (int32_t)hash.fold() & 0x7fffffff;
 #else
-    id = (int32_t) hash.fold();
+    id = (int32_t)hash.fold();
 #endif
   }
   return id;
@@ -134,7 +136,8 @@ LogFormat::init_variables(const char *name, const char *fieldlist_str, const cha
   if (m_field_count == 0) {
     m_valid = false;
   } else if (m_aggregate && !interval_sec) {
-    Note("Format for aggregate operators but no interval " "was specified");
+    Note("Format for aggregate operators but no interval "
+         "was specified");
     m_valid = false;
   } else {
     if (m_aggregate) {
@@ -143,26 +146,26 @@ LogFormat::init_variables(const char *name, const char *fieldlist_str, const cha
 
     if (m_name_str) {
       ats_free(m_name_str);
-      m_name_str = NULL;
-      m_name_id = 0;
+      m_name_str = nullptr;
+      m_name_id  = 0;
     }
     if (name) {
       m_name_str = ats_strdup(name);
-      m_name_id = id_from_name(m_name_str);
+      m_name_id  = id_from_name(m_name_str);
     }
 
     if (m_fieldlist_str) {
       ats_free(m_fieldlist_str);
-      m_fieldlist_str = NULL;
-      m_fieldlist_id = 0;
+      m_fieldlist_str = nullptr;
+      m_fieldlist_id  = 0;
     }
     if (fieldlist_str) {
       m_fieldlist_str = ats_strdup(fieldlist_str);
-      m_fieldlist_id = id_from_name(m_fieldlist_str);
+      m_fieldlist_id  = id_from_name(m_fieldlist_str);
     }
 
-    m_printf_str = ats_strdup(printf_str);
-    m_interval_sec = interval_sec;
+    m_printf_str    = ats_strdup(printf_str);
+    m_interval_sec  = interval_sec;
     m_interval_next = LogUtils::timestamp();
 
     m_valid = true;
@@ -181,16 +184,16 @@ LogFormat::init_variables(const char *name, const char *fieldlist_str, const cha
 LogFormat::LogFormat(const char *name, const char *format_str, unsigned interval_sec)
   : m_interval_sec(0),
     m_interval_next(0),
-    m_agg_marshal_space(NULL),
+    m_agg_marshal_space(nullptr),
     m_valid(false),
-    m_name_str(NULL),
+    m_name_str(nullptr),
     m_name_id(0),
-    m_fieldlist_str(NULL),
+    m_fieldlist_str(nullptr),
     m_fieldlist_id(0),
     m_field_count(0),
-    m_printf_str(NULL),
+    m_printf_str(nullptr),
     m_aggregate(false),
-    m_format_str(NULL)
+    m_format_str(nullptr)
 {
   setup(name, format_str, interval_sec);
 
@@ -210,16 +213,16 @@ LogFormat::LogFormat(const char *name, const char *format_str, unsigned interval
 LogFormat::LogFormat(const char *name, const char *fieldlist_str, const char *printf_str, unsigned interval_sec)
   : m_interval_sec(0),
     m_interval_next(0),
-    m_agg_marshal_space(NULL),
+    m_agg_marshal_space(nullptr),
     m_valid(false),
-    m_name_str(NULL),
+    m_name_str(nullptr),
     m_name_id(0),
-    m_fieldlist_str(NULL),
+    m_fieldlist_str(nullptr),
     m_fieldlist_id(0),
     m_field_count(0),
-    m_printf_str(NULL),
+    m_printf_str(nullptr),
     m_aggregate(false),
-    m_format_str(NULL)
+    m_format_str(nullptr)
 {
   init_variables(name, fieldlist_str, printf_str, interval_sec);
   m_format_type = LOG_FORMAT_CUSTOM;
@@ -231,26 +234,27 @@ LogFormat::LogFormat(const char *name, const char *fieldlist_str, const char *pr
   This is the copy ctor, needed for copying lists of Format objects.
   -------------------------------------------------------------------------*/
 
-LogFormat::LogFormat(const LogFormat & rhs)
-  : m_interval_sec(0),
+LogFormat::LogFormat(const LogFormat &rhs)
+  : RefCountObj(rhs),
+    m_interval_sec(0),
     m_interval_next(0),
-    m_agg_marshal_space(NULL),
+    m_agg_marshal_space(nullptr),
     m_valid(rhs.m_valid),
-    m_name_str(NULL),
+    m_name_str(nullptr),
     m_name_id(0),
-    m_fieldlist_str(NULL),
+    m_fieldlist_str(nullptr),
     m_fieldlist_id(0),
     m_field_count(0),
-    m_printf_str(NULL),
+    m_printf_str(nullptr),
     m_aggregate(false),
-    m_format_str(NULL),
+    m_format_str(nullptr),
     m_format_type(rhs.m_format_type)
 {
   if (m_valid) {
     if (m_format_type == LOG_FORMAT_TEXT) {
       m_name_str = ats_strdup(rhs.m_name_str);
     } else {
-      m_format_str = rhs.m_format_str ? ats_strdup(rhs.m_format_str) : 0;
+      m_format_str = rhs.m_format_str ? ats_strdup(rhs.m_format_str) : nullptr;
       init_variables(rhs.m_name_str, rhs.m_fieldlist_str, rhs.m_printf_str, rhs.m_interval_sec);
     }
   }
@@ -283,16 +287,16 @@ LogFormat::~LogFormat()
   -------------------------------------------------------------------------*/
 
 LogFormat *
-LogFormat::format_from_specification(char *spec, char **file_name, char **file_header, LogFileFormat * file_type)
+LogFormat::format_from_specification(char *spec, char **file_name, char **file_header, LogFileFormat *file_type)
 {
   LogFormat *format;
   char *token;
   int format_id;
   char *format_name, *format_str;
 
-  ink_assert(file_name != NULL);
-  ink_assert(file_header != NULL);
-  ink_assert(file_type != NULL);
+  ink_assert(file_name != nullptr);
+  ink_assert(file_header != nullptr);
+  ink_assert(file_type != nullptr);
 
   SimpleTokenizer tok(spec, ':');
 
@@ -305,15 +309,15 @@ LogFormat::format_from_specification(char *spec, char **file_name, char **file_h
   // First should be the "format" keyword that says this is a format spec.
   //
   token = tok.getNext();
-  if (token == NULL) {
+  if (token == nullptr) {
     Debug("log-format", "token expected");
-    return NULL;
+    return nullptr;
   }
   if (strcasecmp(token, "format") == 0) {
     Debug("log-format", "this is a format");
   } else {
     Debug("log-format", "should be 'format'");
-    return NULL;
+    return nullptr;
   }
 
   //
@@ -321,27 +325,27 @@ LogFormat::format_from_specification(char *spec, char **file_name, char **file_h
   // whether we should care about this format or not.
   //
   token = tok.getNext();
-  if (token == NULL) {
+  if (token == nullptr) {
     Debug("log-format", "token expected");
-    return NULL;
+    return nullptr;
   }
   if (!strcasecmp(token, "disabled")) {
     Debug("log-format", "format not enabled, skipping ...");
-    return NULL;
+    return nullptr;
   } else if (!strcasecmp(token, "enabled")) {
     Debug("log-format", "enabled format");
   } else {
     Debug("log-format", "should be 'enabled' or 'disabled', not %s", token);
-    return NULL;
+    return nullptr;
   }
 
   //
   // Next should be the numeric format identifier
   //
   token = tok.getNext();
-  if (token == NULL) {
+  if (token == nullptr) {
     Debug("log-format", "token expected");
-    return NULL;
+    return nullptr;
   }
   format_id = atoi(token);
   // NOW UNUSED !!!
@@ -350,9 +354,9 @@ LogFormat::format_from_specification(char *spec, char **file_name, char **file_h
   // Next should be the format name
   //
   token = tok.getNext();
-  if (token == NULL) {
+  if (token == nullptr) {
     Debug("log-format", "token expected");
-    return NULL;
+    return nullptr;
   }
   format_name = token;
 
@@ -360,9 +364,9 @@ LogFormat::format_from_specification(char *spec, char **file_name, char **file_h
   // Next should be the printf-stlye format symbol string
   //
   token = tok.getNext();
-  if (token == NULL) {
+  if (token == nullptr) {
     Debug("log-format", "token expected");
-    return NULL;
+    return nullptr;
   }
   format_str = token;
 
@@ -370,9 +374,9 @@ LogFormat::format_from_specification(char *spec, char **file_name, char **file_h
   // Next should be the file name for the log
   //
   token = tok.getNext();
-  if (token == NULL) {
+  if (token == nullptr) {
     Debug("log-format", "token expected");
-    return NULL;
+    return nullptr;
   }
   *file_name = ats_strdup(token);
 
@@ -380,9 +384,9 @@ LogFormat::format_from_specification(char *spec, char **file_name, char **file_h
   // Next should be the file type, either "ASCII" or "BINARY"
   //
   token = tok.getNext();
-  if (token == NULL) {
+  if (token == nullptr) {
     Debug("log-format", "token expected");
-    return NULL;
+    return nullptr;
   }
   if (!strcasecmp(token, "ASCII")) {
     *file_type = LOG_FILE_ASCII;
@@ -390,29 +394,29 @@ LogFormat::format_from_specification(char *spec, char **file_name, char **file_h
     *file_type = LOG_FILE_BINARY;
   } else {
     Debug("log-format", "%s is not a valid file format (ASCII or BINARY)", token);
-    return NULL;
+    return nullptr;
   }
 
   //
   // the rest should be the file header
   //
   token = tok.getRest();
-  if (token == NULL) {
+  if (token == nullptr) {
     Debug("log-format", "token expected");
-    return NULL;
+    return nullptr;
   }
   // set header to NULL if "none" was specified (a NULL header means
   // "write no header" to the rest of the logging system)
   //
-  *file_header = strcmp(token, "none") == 0 ? NULL : ats_strdup(token);
+  *file_header = strcmp(token, "none") == 0 ? nullptr : ats_strdup(token);
 
   Debug("log-format", "custom:%d:%s:%s:%s:%d:%s", format_id, format_name, format_str, *file_name, *file_type, token);
 
   format = new LogFormat(format_name, format_str);
-  ink_assert(format != NULL);
+  ink_assert(format != nullptr);
   if (!format->valid()) {
     delete format;
-    return NULL;
+    return nullptr;
   }
 
   return format;
@@ -436,10 +440,11 @@ LogFormat::parse_symbol_string(const char *symbol_string, LogFieldList *field_li
   LogField::Container container;
   LogField::Aggregate aggregate;
 
-  if (symbol_string == NULL)
+  if (symbol_string == nullptr) {
     return 0;
-  ink_assert(field_list != NULL);
-  ink_assert(contains_aggregates != NULL);
+  }
+  ink_assert(field_list != nullptr);
+  ink_assert(contains_aggregates != nullptr);
 
   *contains_aggregates = false; // we'll change if it does
 
@@ -447,9 +452,9 @@ LogFormat::parse_symbol_string(const char *symbol_string, LogFieldList *field_li
   // strtok_r will mangle the input string; we'll make a copy for that.
   //
   sym_str = ats_strdup(symbol_string);
-  symbol = strtok_r(sym_str, ",", &saveptr);
+  symbol  = strtok_r(sym_str, ",", &saveptr);
 
-  while (symbol != NULL) {
+  while (symbol != nullptr) {
     //
     // See if there is an aggregate operator, which will contain "()"
     //
@@ -459,9 +464,9 @@ LogFormat::parse_symbol_string(const char *symbol_string, LogFieldList *field_li
       if (end_paren) {
         Debug("log-agg", "Aggregate symbol: %s", symbol);
         *begin_paren = '\0';
-        *end_paren = '\0';
-        name = begin_paren + 1;
-        sym = symbol;
+        *end_paren   = '\0';
+        name         = begin_paren + 1;
+        sym          = symbol;
         Debug("log-agg", "Aggregate = %s, field = %s", sym, name);
         aggregate = LogField::valid_aggregate_name(sym);
         if (aggregate == LogField::NO_AGGREGATE) {
@@ -473,7 +478,9 @@ LogFormat::parse_symbol_string(const char *symbol_string, LogFieldList *field_li
             f = Log::global_field_list.find_by_symbol(name);
           }
           if (!f) {
-            Note("Invalid field symbol %s used in aggregate " "operation", name);
+            Note("Invalid field symbol %s used in aggregate "
+                 "operation",
+                 name);
           } else if (f->type() != LogField::sINT) {
             Note("Only single integer field types may be aggregated");
           } else {
@@ -486,7 +493,9 @@ LogFormat::parse_symbol_string(const char *symbol_string, LogFieldList *field_li
           }
         }
       } else {
-        Note("Invalid aggregate field specification: no trailing " "')' in %s", symbol);
+        Note("Invalid aggregate field specification: no trailing "
+             "')' in %s",
+             symbol);
       }
     }
     //
@@ -494,12 +503,12 @@ LogFormat::parse_symbol_string(const char *symbol_string, LogFieldList *field_li
     //
     else if (*symbol == '{') {
       Debug("log-format", "Container symbol: %s", symbol);
-      f = NULL;
+      f              = nullptr;
       char *name_end = strchr(symbol, '}');
-      if (name_end != NULL) {
-        name = symbol + 1;
-        *name_end = 0;          // changes '}' to '\0'
-        sym = name_end + 1;     // start of container symbol
+      if (name_end != nullptr) {
+        name      = symbol + 1;
+        *name_end = 0;            // changes '}' to '\0'
+        sym       = name_end + 1; // start of container symbol
         LogSlice slice(sym);
         Debug("log-format", "Name = %s, symbol = %s", name, sym);
         container = LogField::valid_container_name(sym);
@@ -507,18 +516,19 @@ LogFormat::parse_symbol_string(const char *symbol_string, LogFieldList *field_li
           Note("Invalid container specification: %s", sym);
         } else {
           f = new LogField(name, container);
-          ink_assert(f != NULL);
+          ink_assert(f != nullptr);
           if (slice.m_enable) {
             f->m_slice = slice;
-            Debug("log-slice", "symbol = %s, [%d:%d]", sym,
-                  f->m_slice.m_start, f->m_slice.m_end);
+            Debug("log-slice", "symbol = %s, [%d:%d]", sym, f->m_slice.m_start, f->m_slice.m_end);
           }
           field_list->add(f, false);
           field_count++;
           Debug("log-format", "Container field {%s}%s added", name, sym);
         }
       } else {
-        Note("Invalid container field specification: no trailing " "'}' in %s", symbol);
+        Note("Invalid container field specification: no trailing "
+             "'}' in %s",
+             symbol);
       }
     }
     //
@@ -528,25 +538,26 @@ LogFormat::parse_symbol_string(const char *symbol_string, LogFieldList *field_li
       LogSlice slice(symbol);
       Debug("log-format", "Regular field symbol: %s", symbol);
       f = Log::global_field_list.find_by_symbol(symbol);
-      if (f != NULL) {
+      if (f != nullptr) {
         LogField *cpy = new LogField(*f);
         if (slice.m_enable) {
           cpy->m_slice = slice;
-          Debug("log-slice", "symbol = %s, [%d:%d]", symbol,
-                cpy->m_slice.m_start, cpy->m_slice.m_end);
+          Debug("log-slice", "symbol = %s, [%d:%d]", symbol, cpy->m_slice.m_start, cpy->m_slice.m_end);
         }
         field_list->add(cpy, false);
         field_count++;
         Debug("log-format", "Regular field %s added", symbol);
       } else {
-        Note("The log format symbol %s was not found in the " "list of known symbols.", symbol);
+        Note("The log format symbol %s was not found in the "
+             "list of known symbols.",
+             symbol);
       }
     }
 
     //
     // Get the next symbol
     //
-    symbol = strtok_r(NULL, ",", &saveptr);
+    symbol = strtok_r(nullptr, ",", &saveptr);
   }
 
   ats_free(sym_str);
@@ -577,48 +588,53 @@ LogFormat::parse_escape_string(const char *str, int len)
   int sum, start = 0;
   unsigned char a, b, c;
 
-  if (str[start] != '\\' || len < 2)
+  if (str[start] != '\\' || len < 2) {
     return -1;
+  }
 
-  if (str[start + 1] == '\\')
+  if (str[start + 1] == '\\') {
     return '\\';
-
-  if (len < 4)
+  }
+  if (len < 4) {
     return -1;
+  }
 
   a = (unsigned char)str[start + 1];
   b = (unsigned char)str[start + 2];
   c = (unsigned char)str[start + 3];
 
-  if (isdigit(a) && isdigit(b) && isdigit(b)) {
-
-    sum = (a - '0')*64 + (b - '0')*8 + (c - '0');
+  if (isdigit(a) && isdigit(b)) {
+    sum = (a - '0') * 64 + (b - '0') * 8 + (c - '0');
 
     if (sum == 0 || sum >= 255) {
       Warning("Octal escape sequence out of range: \\%c%c%c, treat it as normal string\n", a, b, c);
       return -1;
-    } else
+    } else {
       return sum;
+    }
 
   } else if (tolower(a) == 'x' && isxdigit(b) && isxdigit(c)) {
     int i, j;
-    if (isdigit(b))
+    if (isdigit(b)) {
       i = b - '0';
-    else
+    } else {
       i = toupper(b) - 'A' + 10;
+    }
 
-    if (isdigit(c))
+    if (isdigit(c)) {
       j = c - '0';
-    else
+    } else {
       j = toupper(c) - 'A' + 10;
+    }
 
-    sum = i*16 + j;
+    sum = i * 16 + j;
 
     if (sum == 0 || sum >= 255) {
       Warning("Hex escape sequence out of range: \\%c%c%c, treat it as normal string\n", a, b, c);
       return -1;
-    } else
+    } else {
       return sum;
+    }
   }
 
   return -1;
@@ -641,11 +657,11 @@ LogFormat::parse_escape_string(const char *str, int len)
 int
 LogFormat::parse_format_string(const char *format_str, char **printf_str, char **fields_str)
 {
-  ink_assert(printf_str != NULL);
-  ink_assert(fields_str != NULL);
+  ink_assert(printf_str != nullptr);
+  ink_assert(fields_str != nullptr);
 
-  if (format_str == NULL) {
-    *printf_str = *fields_str = NULL;
+  if (format_str == nullptr) {
+    *printf_str = *fields_str = nullptr;
     return 0;
   }
   //
@@ -655,11 +671,11 @@ LogFormat::parse_format_string(const char *format_str, char **printf_str, char *
   // string.
   //
   unsigned len = (unsigned)::strlen(format_str);
-  *printf_str = (char *)ats_malloc(len + 1);
-  *fields_str = (char *)ats_malloc(len + 1);
+  *printf_str  = (char *)ats_malloc(len + 1);
+  *fields_str  = (char *)ats_malloc(len + 1);
 
-  unsigned printf_pos = 0;
-  unsigned fields_pos = 0;
+  unsigned printf_pos  = 0;
+  unsigned fields_pos  = 0;
   unsigned field_count = 0;
   unsigned field_len;
   unsigned start, stop;
@@ -738,8 +754,7 @@ LogFormat::parse_format_string(const char *format_str, char **printf_str, char *
   (*fields_str)[fields_pos] = '\0';
   (*printf_str)[printf_pos] = '\0';
 
-  Debug("log-format", "LogFormat::parse_format_string: field_count=%d, \"%s\", \"%s\"", field_count, *fields_str,
-        *printf_str);
+  Debug("log-format", "LogFormat::parse_format_string: field_count=%d, \"%s\", \"%s\"", field_count, *fields_str, *printf_str);
   return field_count;
 }
 
@@ -750,16 +765,9 @@ LogFormat::parse_format_string(const char *format_str, char **printf_str, char *
   -------------------------------------------------------------------------*/
 
 void
-LogFormat::display(FILE * fd)
+LogFormat::display(FILE *fd)
 {
-  static const char *types[] = {
-    "SQUID_LOG",
-    "COMMON_LOG",
-    "EXTENDED_LOG",
-    "EXTENDED2_LOG",
-    "LOG_FORMAT_CUSTOM",
-    "LOG_FORMAT_TEXT"
-  };
+  static const char *types[] = {"SQUID_LOG", "COMMON_LOG", "EXTENDED_LOG", "EXTENDED2_LOG", "LOG_FORMAT_CUSTOM", "LOG_FORMAT_TEXT"};
 
   fprintf(fd, "--------------------------------------------------------\n");
   fprintf(fd, "Format : %s (%s) (%p), %u fields.\n", m_name_str, types[m_format_type], this, m_field_count);
@@ -771,20 +779,6 @@ LogFormat::display(FILE * fd)
     fprintf(fd, "Fields : None\n");
   }
   fprintf(fd, "--------------------------------------------------------\n");
-}
-
-void
-LogFormat::displayAsXML(FILE * fd)
-{
-  if (valid()) {
-    fprintf(fd,
-            "<LogFormat>\n"
-            "  <Name     = \"%s\"/>\n"
-            "  <Format   = \"%s\"/>\n"
-            "  <Interval = \"%ld\"/>\n" "</LogFormat>\n", m_name_str, m_format_str, m_interval_sec);
-  } else {
-    fprintf(fd, "INVALID FORMAT\n");
-  }
 }
 
 /*-------------------------------------------------------------------------
@@ -810,9 +804,9 @@ LogFormatList::clear()
 }
 
 void
-LogFormatList::add(LogFormat * format, bool copy)
+LogFormatList::add(LogFormat *format, bool copy)
 {
-  ink_assert(format != NULL);
+  ink_assert(format != nullptr);
 
   if (copy) {
     m_format_list.enqueue(new LogFormat(*format));
@@ -824,28 +818,28 @@ LogFormatList::add(LogFormat * format, bool copy)
 LogFormat *
 LogFormatList::find_by_name(const char *name) const
 {
-  for (LogFormat * f = first(); f; f = next(f)) {
+  for (LogFormat *f = first(); f; f = next(f)) {
     if (!strcmp(f->name(), name)) {
       return f;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 unsigned
 LogFormatList::count()
 {
   unsigned cnt = 0;
-  for (LogFormat * f = first(); f; f = next(f)) {
+  for (LogFormat *f = first(); f; f = next(f)) {
     cnt++;
   }
   return cnt;
 }
 
 void
-LogFormatList::display(FILE * fd)
+LogFormatList::display(FILE *fd)
 {
-  for (LogFormat * f = first(); f; f = next(f)) {
+  for (LogFormat *f = first(); f; f = next(f)) {
     f->display(fd);
   }
 }

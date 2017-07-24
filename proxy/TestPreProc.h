@@ -21,7 +21,7 @@
   limitations under the License.
  */
 
-#if !defined (_TestPreProc_h_)
+#if !defined(_TestPreProc_h_)
 #define _TestPreProc_h_
 
 class IOBuffer;
@@ -29,20 +29,21 @@ class IOBuffer;
 class RequestInput
 {
 public:
-  RequestInput(const char *str, IOBuffer * cb);
-   ~RequestInput();
+  RequestInput(const char *str, IOBuffer *cb);
+  ~RequestInput();
 
   void run();
-  bool isDone() const
+  bool
+  isDone() const
   {
     return (m_len == 0);
   }
 
+  // noncopyable
+  RequestInput(const RequestInput &) = delete;
+  RequestInput &operator=(const RequestInput &) = delete;
+
 private:
-    RequestInput(const RequestInput &);
-    RequestInput & operator =(const RequestInput &);
-
-
   char *m_sp;
   unsigned m_len;
   IOBuffer *m_cb;

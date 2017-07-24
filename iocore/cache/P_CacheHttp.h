@@ -25,53 +25,42 @@
 #define __CACHE_HTTP_H__
 
 #include "P_CacheArray.h"
-#ifdef HTTP_CACHE
 #include "HTTP.h"
 #include "URL.h"
-
 
 typedef URL CacheURL;
 typedef HTTPHdr CacheHTTPHdr;
 typedef HTTPInfo CacheHTTPInfo;
 
-
 #define OFFSET_BITS 24
-enum
-{
-  OWNER_NONE = 0,
+enum {
+  OWNER_NONE  = 0,
   OWNER_CACHE = 1,
-  OWNER_HTTP = 2
+  OWNER_HTTP  = 2,
 };
 
-#else
-struct CacheHTTPInfo
-{
-};
-
-#endif //HTTP_CACHE
-
-struct vec_info
-{
+struct vec_info {
   CacheHTTPInfo alternate;
 };
 
-struct CacheHTTPInfoVector
-{
+struct CacheHTTPInfoVector {
   void *magic;
 
-    CacheHTTPInfoVector();
-   ~CacheHTTPInfoVector();
+  CacheHTTPInfoVector();
+  ~CacheHTTPInfoVector();
 
-  int count()
+  int
+  count()
   {
     return xcount;
   }
-  int insert(CacheHTTPInfo * info, int id = -1);
+  int insert(CacheHTTPInfo *info, int id = -1);
   CacheHTTPInfo *get(int idx);
-  void detach(int idx, CacheHTTPInfo * r);
+  void detach(int idx, CacheHTTPInfo *r);
   void remove(int idx, bool destroy);
   void clear(bool destroy = true);
-  void reset()
+  void
+  reset()
   {
     xcount = 0;
     data.clear();
@@ -80,8 +69,8 @@ struct CacheHTTPInfoVector
 
   int marshal_length();
   int marshal(char *buf, int length);
-  uint32_t get_handles(const char *buf, int length, RefCountObj * block_ptr = NULL);
-  int unmarshal(const char *buf, int length, RefCountObj * block_ptr);
+  uint32_t get_handles(const char *buf, int length, RefCountObj *block_ptr = nullptr);
+  int unmarshal(const char *buf, int length, RefCountObj *block_ptr);
 
   CacheArray<vec_info> data;
   int xcount;

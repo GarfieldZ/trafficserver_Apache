@@ -16,10 +16,9 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-AM_CPPFLAGS = \
-  -I$(top_srcdir)/lib \
-  -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts
+AM_CPPFLAGS += \
+  -I$(abs_top_srcdir)/lib \
+  -I$(abs_top_srcdir)/lib/records
 
 TESTS = $(check_PROGRAMS)
 
@@ -71,18 +70,22 @@ libinkevent_a_SOURCES = \
 
 check_PROGRAMS = test_Buffer test_Event
 
-test_CXXFLAGS = \
-  $(iocore_include_dirs) \
-  -I$(top_srcdir)/proxy/api/ts \
-  -I$(top_srcdir)/proxy/api \
-  -I$(top_srcdir)/proxy \
-  -I$(top_srcdir)/proxy/hdrs \
-  -I$(top_srcdir)/proxy/http \
-  -I$(top_srcdir)/proxy/logging \
-  -I$(top_srcdir)/mgmt \
-  -I$(top_srcdir)/mgmt/utils
+test_LD_FLAGS = \
+  @AM_LDFLAGS@ \
+  @OPENSSL_LDFLAGS@
 
-test_LDADD = \
+test_CPP_FLAGS = \
+  $(AM_CPPFLAGS) \
+  $(iocore_include_dirs) \
+  -I$(abs_top_srcdir)/proxy \
+  -I$(abs_top_srcdir)/proxy/hdrs \
+  -I$(abs_top_srcdir)/proxy/http \
+  -I$(abs_top_srcdir)/proxy/logging \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/utils \
+  @OPENSSL_INCLUDES@
+
+test_LD_ADD = \
   libinkevent.a \
   $(top_builddir)/lib/records/librecords_p.a \
   $(top_builddir)/mgmt/libmgmt_p.la \
@@ -105,8 +108,16 @@ test_Event_SOURCES = \
 #  test_I_Event.cc \
 #  test_P_Event.cc
 
-test_Buffer_CXXFLAGS = $(test_CXXFLAGS)
-test_Event_CXXFLAGS = $(test_CXXFLAGS)
+test_Buffer_CPPFLAGS = $(test_CPP_FLAGS)
+test_Event_CPPFLAGS = $(test_CPP_FLAGS)
 
-test_Buffer_LDADD = $(test_LDADD)
-test_Event_LDADD = $(test_LDADD)
+test_Buffer_LDFLAGS = $(test_LD_FLAGS)
+test_Event_LDFLAGS = $(test_LD_FLAGS)
+
+test_Buffer_LDADD = $(test_LD_ADD)
+test_Event_LDADD = $(test_LD_ADD)
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

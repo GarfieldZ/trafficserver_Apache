@@ -38,67 +38,65 @@
 
 #include "MgmtUtils.h"
 #include "BaseManager.h"
-#include "ink_sock.h"
+#include "ts/ink_sock.h"
 
-#include "ink_apidefs.h"
+#include "ts/ink_apidefs.h"
+#include <functional>
 
 class ConfigUpdateCbTable;
 
-void *startProcessManager(void *arg);
-class ProcessManager:public BaseManager
+class ProcessManager : public BaseManager
 {
-
 public:
   ProcessManager(bool rlm);
-  ~ProcessManager()
-  {
-    close_socket(local_manager_sockfd);
-    while (!queue_is_empty(mgmt_signal_queue)) {
-      char *sig = (char *) dequeue(mgmt_signal_queue);
-      ats_free(sig);
-    }
-    ats_free(mgmt_signal_queue);
-  }
+  ~ProcessManager();
 
-  void start()
-  {
-    ink_thread_create(startProcessManager, 0);
-  }
+  // Start a thread for the process manager. If @a cb is set then it
+  // is called after the thread is started and before any messages are
+  // processed.
+  void start(std::function<void()> const &cb = std::function<void()>());
 
-  void stop()
-  {
-    mgmt_log(stderr, "[ProcessManager::stop] Bringing down connection\n");
-    close_socket(local_manager_sockfd);
-  }
+  // Stop the process manager, dropping any unprocessed messages.
+  void stop();
 
+  inkcoreapi void signalConfigFileChild(const char *parent, const char *child, unsigned int options);
   inkcoreapi void signalManager(int msg_id, const char *data_str);
   inkcoreapi void signalManager(int msg_id, const char *data_raw, int data_len);
 
   void reconfigure();
   void initLMConnection();
-  void pollLMConnection();
-  void handleMgmtMsgFromLM(MgmtMessageHdr * mh);
+  void handleMgmtMsgFromLM(MgmtMessageHdr *mh);
 
-  bool processEventQueue();
-  bool processSignalQueue();
-
-  void registerPluginCallbacks(ConfigUpdateCbTable * _cbtable) {
+  void
+  registerPluginCallbacks(ConfigUpdateCbTable *_cbtable)
+  {
     cbtable = _cbtable;
   }
 
+private:
+  int pollLMConnection();
+  int processSignalQueue();
+  bool processEventQueue();
+
   bool require_lm;
-  time_t timeout;
-  int mgmt_sync_key;
-
+  RecInt timeout;
   LLQ *mgmt_signal_queue;
-
   pid_t pid;
 
-  int local_manager_sockfd;
+  ink_thread poll_thread = ink_thread_null();
+  volatile int running   = 0;
 
-private:
-  ConfigUpdateCbTable * cbtable;
-};                              /* End class ProcessManager */
+  /// Thread initialization callback.
+  /// This allows @c traffic_server and @c traffic_manager to perform different initialization in the thread.
+  std::function<void()> init;
+
+  int local_manager_sockfd;
+  ConfigUpdateCbTable *cbtable;
+  int max_msgs_in_a_row;
+
+  static const int MAX_MSGS_IN_A_ROW = 10000;
+  static void *processManagerThread(void *arg);
+};
 
 inkcoreapi extern ProcessManager *pmgmt;
 

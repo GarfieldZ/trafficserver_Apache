@@ -28,13 +28,13 @@
 
  */
 
-#if !defined (_I_OneWayMultiTunnel_h_)
+#if !defined(_I_OneWayMultiTunnel_h_)
 #define _I_OneWayMultiTunnel_h_
 
 #include "I_OneWayTunnel.h"
 
 /** Maximum number which can be tunnelled too */
-#define ONE_WAY_MULTI_TUNNEL_LIMIT          4
+#define ONE_WAY_MULTI_TUNNEL_LIMIT 4
 
 /**
   A generic state machine that connects a source virtual conection to
@@ -45,16 +45,15 @@
   to the target vcs. The maximum number of Target VCs is limited by
   ONE_WAY_MULTI_TUNNEL_LIMIT.
 
-  If manipulate_fn is not NULL, then the tunnel acts as a filter,
+  If manipulate_fn is not nullptr, then the tunnel acts as a filter,
   processing all data arriving from the source vc by the manipulate_fn
   function, before sending to the target vcs. By default, the
-  manipulate_fn is set to NULL, yielding the identity function.
+  manipulate_fn is set to nullptr, yielding the identity function.
 
   @see OneWayTunnel
 
 */
-struct OneWayMultiTunnel: public OneWayTunnel
-{
+struct OneWayMultiTunnel : public OneWayTunnel {
   //
   // Public Interface
   //
@@ -75,7 +74,7 @@ struct OneWayMultiTunnel: public OneWayTunnel
   */
   static void OneWayMultiTunnel_free(OneWayMultiTunnel *);
 
-    OneWayMultiTunnel();
+  OneWayMultiTunnel();
 
   // Use One of the following init functions to start the tunnel.
 
@@ -109,11 +108,10 @@ struct OneWayMultiTunnel: public OneWayTunnel
     @param water_mark for the MIOBuffer used for reading.
 
   */
-  void init(VConnection * vcSource, VConnection ** vcTargets, int n_vcTargets, Continuation * aCont = NULL, int size_estimate = 0,      // 0 == best guess
-            int64_t nbytes = TUNNEL_TILL_DONE,
-            bool asingle_buffer = true,
-            bool aclose_source = true,
-            bool aclose_target = true, Transform_fn manipulate_fn = NULL, int water_mark = 0);
+  void init(VConnection *vcSource, VConnection **vcTargets, int n_vcTargets, Continuation *aCont = nullptr,
+            int size_estimate = 0, // 0 == best guess
+            int64_t nbytes = TUNNEL_TILL_DONE, bool asingle_buffer = true, bool aclose_source = true, bool aclose_target = true,
+            Transform_fn manipulate_fn = nullptr, int water_mark = 0);
 
   /**
     Use this init function if both the read and the write sides have
@@ -133,7 +131,7 @@ struct OneWayMultiTunnel: public OneWayTunnel
       end. If aCont is not specified, this should be set to true.
 
   */
-  void init(Continuation * aCont, VIO * SourceVio, VIO ** TargetVios, int n_vioTargets, bool aclose_source = true,
+  void init(Continuation *aCont, VIO *SourceVio, VIO **TargetVios, int n_vioTargets, bool aclose_source = true,
             bool aclose_target = true);
 
   //
@@ -142,12 +140,12 @@ struct OneWayMultiTunnel: public OneWayTunnel
   int startEvent(int event, void *data);
 
   virtual void reenable_all();
-  virtual void close_target_vio(int result, VIO * vio = NULL);
+  virtual void close_target_vio(int result, VIO *vio = nullptr);
 
-  int n_vioTargets;
-  VIO *vioTargets[ONE_WAY_MULTI_TUNNEL_LIMIT];
+  int n_vioTargets                      = 0;
+  bool source_read_previously_completed = false;
   MIOBufferAccessor topOutBuffer;
-  bool source_read_previously_completed;
+  VIO *vioTargets[ONE_WAY_MULTI_TUNNEL_LIMIT];
 };
 
 extern ClassAllocator<OneWayMultiTunnel> OneWayMultiTunnelAllocator;

@@ -21,12 +21,13 @@
   limitations under the License.
  */
 
-#include "libts.h"
-#include "ink_stack_trace.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_stack_trace.h"
+#include "ts/ink_args.h"
 
 #include <strings.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <unistd.h>
 
 #ifndef STDERR_FILENO
@@ -35,8 +36,8 @@
 
 #if TS_HAS_BACKTRACE
 
-#include <execinfo.h>           /* for backtrace_symbols, etc. */
-#include <signal.h>
+#include <execinfo.h> /* for backtrace_symbols, etc. */
+#include <csignal>
 
 void
 ink_stack_trace_dump()
@@ -45,10 +46,12 @@ ink_stack_trace_dump()
 
   // Recopy and re-terminate the app name in case it has been trashed.
   const char *msg = " - STACK TRACE: \n";
-  if (write(STDERR_FILENO, program_name, strlen(program_name)) == -1)
+  if (write(STDERR_FILENO, program_name, strlen(program_name)) == -1) {
     return;
-  if (write(STDERR_FILENO, msg, strlen(msg)) == -1)
+  }
+  if (write(STDERR_FILENO, msg, strlen(msg)) == -1) {
     return;
+  }
 
   // In certain situations you can get stuck in malloc waiting for a lock
   // that your program held when it segfaulted. We set an alarm so that
@@ -63,14 +66,14 @@ ink_stack_trace_dump()
   }
 }
 
-#else  /* !TS_HAS_BACKTRACE */
+#else /* !TS_HAS_BACKTRACE */
 
 void
 ink_stack_trace_dump()
 {
   const char msg[] = "ink_stack_trace_dump not implemented on this operating system\n";
   if (write(STDERR_FILENO, msg, sizeof(msg) - 1) == -1)
-      return;
+    return;
 }
 
-#endif  /* TS_HAS_BACKTRACE */
+#endif /* TS_HAS_BACKTRACE */

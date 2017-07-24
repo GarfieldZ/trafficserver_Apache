@@ -24,8 +24,9 @@
 
 UrlMappingPathIndex::~UrlMappingPathIndex()
 {
-  for (UrlMappingGroup::iterator group_iter = m_tries.begin(); group_iter != m_tries.end(); ++group_iter)
-    delete group_iter->second; // Delete the Trie
+  for (auto &m_trie : m_tries) {
+    delete m_trie.second; // Delete the Trie
+  }
   m_tries.clear();
 }
 
@@ -43,8 +44,7 @@ UrlMappingPathIndex::Insert(url_mapping *mapping)
   if (!trie) {
     trie = new UrlMappingTrie();
     m_tries.insert(UrlMappingGroup::value_type(UrlMappingTrieKey(scheme_idx, port), trie));
-    Debug("UrlMappingPathIndex::Insert", "Created new trie for scheme index, port combo <%d, %d>",
-          scheme_idx, port);
+    Debug("UrlMappingPathIndex::Insert", "Created new trie for scheme index, port combo <%d, %d>", scheme_idx, port);
   }
 
   from_path = mapping->fromURL.path_get(&from_path_len);
@@ -59,7 +59,7 @@ UrlMappingPathIndex::Insert(url_mapping *mapping)
 url_mapping *
 UrlMappingPathIndex::Search(URL *request_url, int request_port, bool normal_search /* = true */) const
 {
-  url_mapping *retval = 0;
+  url_mapping *retval = nullptr;
   int scheme_idx;
   UrlMappingTrie *trie;
   int path_len;
@@ -68,8 +68,7 @@ UrlMappingPathIndex::Search(URL *request_url, int request_port, bool normal_sear
   trie = _GetTrie(request_url, scheme_idx, request_port, normal_search);
 
   if (!trie) {
-    Debug("UrlMappingPathIndex::Search", "No mappings exist for scheme index, port combo <%d, %d>",
-          scheme_idx, request_port);
+    Debug("UrlMappingPathIndex::Search", "No mappings exist for scheme index, port combo <%d, %d>", scheme_idx, request_port);
     goto lFail;
   }
 
@@ -81,12 +80,13 @@ UrlMappingPathIndex::Search(URL *request_url, int request_port, bool normal_sear
   return retval;
 
 lFail:
-  return 0;
+  return nullptr;
 }
 
 void
 UrlMappingPathIndex::Print()
 {
-  for (UrlMappingGroup::iterator group_iter = m_tries.begin(); group_iter != m_tries.end(); ++group_iter)
-    group_iter->second->Print();
+  for (auto &m_trie : m_tries) {
+    m_trie.second->Print();
+  }
 }

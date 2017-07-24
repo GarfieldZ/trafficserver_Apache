@@ -21,12 +21,13 @@
   limitations under the License.
  */
 
-#include "libts.h"   /* MAGIC_EDITING_TAG */
+#include "ts/ink_platform.h"
+#include "ts/ink_assert.h"
 
-#include <assert.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cassert>
+#include <cstdarg>
+#include <cstdlib>
+#include <cstring>
 
 #define INK_MAX_STRING_ARRAY_SIZE 128
 
@@ -36,58 +37,11 @@ char *
 ink_memcpy_until_char(char *dst, char *src, unsigned int n, unsigned char c)
 {
   unsigned int i = 0;
-  for (; ((i < n) && (((unsigned char) src[i]) != c)); i++)
+  for (; ((i < n) && (((unsigned char)src[i]) != c)); i++) {
     dst[i] = src[i];
+  }
   return &src[i];
 }
-
-/*---------------------------------------------------------------------------*
-
-  char *ink_strncpy(char *dest, char *src, int n)
-
-  This routine is a safer version of strncpy which always NUL terminates
-  the destination string.  Note that this routine has the SAME semantics
-  as strncpy, such as copying exactly n bytes, padding dest with NULs
-  is necessary.  Use ink_string_copy for a non-padding version.
-
- *---------------------------------------------------------------------------*/
-
-char *
-ink_strncpy(char *dest, const char *src, int n)
-{
-  if (likely(src && dest)) {
-    if (n > 1)
-      strncpy(dest, src, (n - 1));
-    if (n > 0)
-      dest[n - 1] = '\0';
-  }
-
-  return (dest);
-}                               /* End ink_strncpy */
-
-/*---------------------------------------------------------------------------*
-
-  char *ink_strncat(char *dest, char *src, int n)
-
-  This routine is a safer version of strncat which always NUL terminates
-  the destination string.  Note that this routine has the SAME semantics
-  as strncat, such as concatinating exactly n bytes, padding dest with NULs
-  is necessary.  Use ink_string_copy for a non-padding version.
-
- *---------------------------------------------------------------------------*/
-
-char *
-ink_strncat(char *dest, const char *src, int n)
-{
-  if (likely(src && dest)) {
-    if (n > 1)
-      strncat(dest, src, (n - 1));
-    if (n > 0)
-      dest[n - 1] = '\0';
-  }
-
-  return (dest);
-}                               /* End ink_strncat */
 
 /*---------------------------------------------------------------------------*
 
@@ -95,7 +49,7 @@ ink_strncat(char *dest, const char *src, int n)
 
   This routine concatenates a variable number of strings into the buffer
   <dest>, returning the pointer to <dest>.  The sequence of strings must end
-  with NULL.
+  with nullptr.
 
  *---------------------------------------------------------------------------*/
 
@@ -109,19 +63,20 @@ ink_string_concatenate_strings(char *dest, ...)
 
   d = dest;
 
-  while (1) {
+  while (true) {
     s = va_arg(ap, char *);
-    if (s == NULL)
+    if (s == nullptr) {
       break;
+    }
 
-    while (*s)
+    while (*s) {
       *d++ = *s++;
+    }
   }
   *d++ = '\0';
   va_end(ap);
   return (dest);
-}                               /* End ink_string_concatenate_strings */
-
+} /* End ink_string_concatenate_strings */
 
 /*---------------------------------------------------------------------------*
 
@@ -129,7 +84,7 @@ ink_string_concatenate_strings(char *dest, ...)
 
   This routine concatenates a variable number of strings into the buffer
   <dest>, returning the pointer to <dest>.  The sequence of strings must end
-  with NULL.  A NUL will always be placed after <dest>, and no more than
+  with nullptr.  A NUL will always be placed after <dest>, and no more than
   <n> - 1 characters will ever be written to <dest>.
 
  *---------------------------------------------------------------------------*/
@@ -146,19 +101,20 @@ ink_string_concatenate_strings_n(char *dest, int n, ...)
 
   while (n > 1) {
     s = va_arg(ap, char *);
-    if (s == NULL)
+    if (s == nullptr) {
       break;
+    }
     while (*s && (n > 1)) {
       *d++ = *s++;
       n--;
     }
   }
-  if (n >= 1)
+  if (n >= 1) {
     *d = '\0';
+  }
   va_end(ap);
   return (dest);
-}                               /* End ink_string_concatenate_strings_n */
-
+} /* End ink_string_concatenate_strings_n */
 
 /*---------------------------------------------------------------------------*
 
@@ -175,18 +131,21 @@ ink_string_append(char *dest, char *src, int n)
 {
   char *d, *s, *last_valid_char;
 
-  ink_assert(src != NULL);
-  ink_assert(dest != NULL);
+  ink_assert(src != nullptr);
+  ink_assert(dest != nullptr);
   ink_assert(n >= 0);
 
-  if (n == 0)
+  if (n == 0) {
     return (dest);
+  }
 
   last_valid_char = dest + n - 1;
 
   /* Scan For End Of Dest */
 
-  for (d = dest; (d <= last_valid_char) && (*d != '\0'); d++);
+  for (d = dest; (d <= last_valid_char) && (*d != '\0'); d++) {
+    ;
+  }
 
   /* If At End Of String, NUL Terminate & Exit */
 
@@ -198,45 +157,48 @@ ink_string_append(char *dest, char *src, int n)
   /* Append src To String */
 
   s = src;
-  while ((d < last_valid_char) && (*s != '\0'))
+  while ((d < last_valid_char) && (*s != '\0')) {
     *d++ = *s++;
+  }
 
   /* If At End Of String, NUL Terminate & Exit */
 
-  if (d > last_valid_char)
+  if (d > last_valid_char) {
     dest[n - 1] = '\0';
-  else
+  } else {
     *d = '\0';
-
+  }
   return (dest);
-}                               /* End ink_string_append */
-
+} /* End ink_string_append */
 
 #if !HAVE_STRLCPY
 size_t
 ink_strlcpy(char *dst, const char *src, size_t siz)
 {
-  char *d = dst;
+  char *d       = dst;
   const char *s = src;
-  size_t n = siz;
+  size_t n      = siz;
 
   /* Copy as many bytes as will fit */
   if (n != 0) {
     while (--n != 0) {
-      if ((*d++ = *s++) == '\0')
+      if ((*d++ = *s++) == '\0') {
         break;
+      }
     }
   }
 
   /* Not enough room in dst, add NUL and traverse rest of src */
   if (n == 0) {
-    if (siz != 0)
-      *d = '\0';      /* NUL-terminate dst */
-    while (*s++)
+    if (siz != 0) {
+      *d = '\0'; /* NUL-terminate dst */
+    }
+    while (*s++) {
       ;
+    }
   }
 
-  return (s - src - 1);   /* count does not include NUL */
+  return (s - src - 1); /* count does not include NUL */
 }
 #endif
 
@@ -244,19 +206,21 @@ ink_strlcpy(char *dst, const char *src, size_t siz)
 size_t
 ink_strlcat(char *dst, const char *src, size_t siz)
 {
-  char *d = dst;
+  char *d       = dst;
   const char *s = src;
-  size_t n = siz;
+  size_t n      = siz;
   size_t dlen;
 
   /* Find the end of dst and adjust bytes left but don't go past end */
-  while (n-- != 0 && *d != '\0')
+  while (n-- != 0 && *d != '\0') {
     d++;
+  }
   dlen = d - dst;
-  n = siz - dlen;
+  n    = siz - dlen;
 
-  if (n == 0)
+  if (n == 0) {
     return (dlen + strlen(s));
+  }
   while (*s != '\0') {
     if (n != 1) {
       *d++ = *s;
@@ -266,7 +230,6 @@ ink_strlcat(char *dst, const char *src, size_t siz)
   }
   *d = '\0';
 
-  return (dlen + (s - src));  /* count does not include NUL */
+  return (dlen + (s - src)); /* count does not include NUL */
 }
 #endif
-

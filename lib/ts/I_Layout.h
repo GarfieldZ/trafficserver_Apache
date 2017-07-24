@@ -35,27 +35,9 @@
   The Layout is a simple place holder for the distribution layout.
 
  */
-struct Layout
-{
-  char *prefix;
-  char *exec_prefix;
-  char *bindir;
-  char *sbindir;
-  char *sysconfdir;
-  char *datadir;
-  char *includedir;
-  char *libdir;
-  char *libexecdir;
-  char *localstatedir;
-  char *sharedstatedir;
-  char *runtimedir;
-  char *logdir;
-  char *mandir;
-  char *infodir;
-  char *cachedir;
-
+struct Layout {
   Layout(const char *prefix = 0);
-   ~Layout();
+  ~Layout();
 
   /**
    Return file path relative to Layout->prefix
@@ -63,6 +45,11 @@ struct Layout
 
   */
   char *relative(const char *file);
+
+  /**
+   update the sysconfdir to a test conf dir
+   */
+  void update_sysconfdir(const char *dir);
 
   /**
    Return file path relative to Layout->prefix
@@ -102,6 +89,22 @@ struct Layout
 
   */
   static Layout *get();
+
+  char *prefix        = nullptr;
+  char *exec_prefix   = nullptr;
+  char *bindir        = nullptr;
+  char *sbindir       = nullptr;
+  char *sysconfdir    = nullptr;
+  char *datadir       = nullptr;
+  char *includedir    = nullptr;
+  char *libdir        = nullptr;
+  char *libexecdir    = nullptr;
+  char *localstatedir = nullptr;
+  char *runtimedir    = nullptr;
+  char *logdir        = nullptr;
+  char *mandir        = nullptr;
+  char *infodir       = nullptr;
+  char *cachedir      = nullptr;
 };
 
 #endif

@@ -17,24 +17,27 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-AM_CPPFLAGS = $(iocore_include_dirs) \
-  -I$(top_srcdir)/lib \
-  -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
-  -I$(top_srcdir)/mgmt \
-  -I$(top_srcdir)/mgmt/cluster \
-  -I$(top_srcdir)/mgmt/api/include
+AM_CPPFLAGS += $(iocore_include_dirs) \
+  -I$(abs_top_srcdir)/lib \
+  -I$(abs_top_srcdir)/lib/records \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/api/include
+
+AM_LDFLAGS += \
+  @OPENSSL_LDFLAGS@
 
 bin_PROGRAMS = traffic_cop
 
 traffic_cop_SOURCES = \
   traffic_cop.cc
 
-traffic_cop_LDFLAGS = @EXTRA_CXX_LDFLAGS@ @LIBTOOL_LINK_FLAGS@
-
 traffic_cop_LDADD = \
   $(top_builddir)/mgmt/libmgmt_c.la \
   $(top_builddir)/mgmt/api/libtsmgmt.la \
   $(top_builddir)/lib/ts/libtsutil.la \
-  $(top_builddir)/lib/records/librecords_cop.a \
-  @LIBRESOLV@ @OPENSSL_LIBS@
+  $(top_builddir)/lib/records/librecords_cop.a
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

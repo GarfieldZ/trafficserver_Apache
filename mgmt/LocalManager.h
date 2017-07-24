@@ -40,25 +40,32 @@
 #if TS_HAS_WCCP
 #include <wccp/Wccp.h>
 #endif
+#include <syslog.h>
 
 class FileManager;
-class ClusterCom;
-class VMap;
 
-class LocalManager: public BaseManager
+enum ManagementPendingOperation {
+  MGMT_PENDING_NONE,         // Do nothing
+  MGMT_PENDING_RESTART,      // Restart TS and TM
+  MGMT_PENDING_BOUNCE,       // Restart TS
+  MGMT_PENDING_IDLE_RESTART, // Restart TS and TM when TS is idle
+  MGMT_PENDING_IDLE_BOUNCE   // Restart TS when TS is idle
+};
+
+class LocalManager : public BaseManager
 {
 public:
   explicit LocalManager(bool proxy_on);
   ~LocalManager();
 
   void initAlarm();
-  void initCCom(const AppVersionInfo& version, FileManager * files, int mcport, char *addr, int rsport);
+  void initCCom(const AppVersionInfo &version, FileManager *files, int mcport, char *addr, int rsport);
   void initMgmtProcessServer();
   void pollMgmtProcessServer();
-  void handleMgmtMsgFromProcesses(MgmtMessageHdr * mh);
+  void handleMgmtMsgFromProcesses(MgmtMessageHdr *mh);
   void sendMgmtMsgToProcesses(int msg_id, const char *data_str);
   void sendMgmtMsgToProcesses(int msg_id, const char *data_raw, int data_len);
-  void sendMgmtMsgToProcesses(MgmtMessageHdr * mh);
+  void sendMgmtMsgToProcesses(MgmtMessageHdr *mh);
 
   void signalFileChange(const char *var_name, bool incVersion = true);
   void signalEvent(int msg_id, const char *data_str);
@@ -66,13 +73,13 @@ public:
   void signalAlarm(int alarm_id, const char *desc = NULL, const char *ip = NULL);
 
   void processEventQueue();
-  bool startProxy();
+  bool startProxy(const char *onetime_options);
   void listenForProxy();
-  void bindProxyPort(HttpProxyPort&);
+  void bindProxyPort(HttpProxyPort &);
   void closeProxyPorts();
 
   void mgmtCleanup();
-  void mgmtShutdown(bool mainThread = false);
+  void mgmtShutdown();
   void processShutdown(bool mainThread = false);
   void processRestart();
   void processBounce();
@@ -80,27 +87,15 @@ public:
   void clearStats(const char *name = NULL);
 
   bool processRunning();
-  bool clusterOk();
-  bool SetForDup(void *hIOCPort, long lTProcId, void *hTh);
-
-  void tick()
-  {
-    ++internal_ticker;
-  };
-  void resetTicker()
-  {
-    internal_ticker = 0;
-  }
-
-  void syslogThrInit();
 
   volatile bool run_proxy;
+  volatile bool proxy_recoverable = true; // false if traffic_server cannot recover with a reboot
   volatile time_t manager_started_at;
-  volatile time_t proxy_started_at;
-  volatile int proxy_launch_count;
-  volatile bool proxy_launch_outstanding;
-  volatile bool mgmt_shutdown_outstanding;
-  volatile int proxy_running;
+  volatile time_t proxy_started_at                              = -1;
+  volatile int proxy_launch_count                               = 0;
+  volatile bool proxy_launch_outstanding                        = false;
+  volatile ManagementPendingOperation mgmt_shutdown_outstanding = MGMT_PENDING_NONE;
+  volatile int proxy_running                                    = 0;
   HttpProxyPort::Group m_proxy_ports;
   // Local inbound addresses to bind, if set.
   IpAddr m_inbound_ip4;
@@ -112,31 +107,25 @@ public:
   char *absolute_proxy_binary;
   char *proxy_name;
   char *proxy_binary;
-  char *proxy_options;
+  char *proxy_options = nullptr; // These options should persist across proxy reboots
   char *env_prep;
 
-  int process_server_sockfd;
-  volatile int watched_process_fd;
-  volatile pid_t proxy_launch_pid;
+  int process_server_sockfd       = ts::NO_FD;
+  volatile int watched_process_fd = ts::NO_FD;
+  volatile pid_t proxy_launch_pid = -1;
 
-  int mgmt_sync_key;
+  Alarms *alarm_keeper     = nullptr;
+  FileManager *configFiles = nullptr;
 
-  Alarms *alarm_keeper;
-  VMap *virt_map;
-  FileManager *configFiles;
+  volatile pid_t watched_process_pid = -1;
 
-  ClusterCom *ccom;
-
-  volatile int internal_ticker;
-  volatile pid_t watched_process_pid;
-
-  int syslog_facility;
+  int syslog_facility = LOG_DAEMON;
 
 #if TS_HAS_WCCP
   wccp::Cache wccp_cache;
-# endif
+#endif
 private:
-};                              /* End class LocalManager */
+}; /* End class LocalManager */
 
 extern LocalManager *lmgmt;
 

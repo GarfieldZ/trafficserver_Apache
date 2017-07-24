@@ -42,23 +42,20 @@ class LogHost;
 // LogCollationClientSM
 //-------------------------------------------------------------------------
 
-class LogCollationClientSM:public LogCollationBase, public Continuation
+class LogCollationClientSM : public LogCollationBase, public Continuation
 {
-
 public:
-
-  LogCollationClientSM(LogHost * log_host);
+  LogCollationClientSM(LogHost *log_host);
   ~LogCollationClientSM();
 
   int client_handler(int event, void *data);
 
   // public interface (for LogFile)
-  int send(LogBuffer * log_buffer);
+  int send(LogBuffer *log_buffer);
 
 private:
-
-  enum ClientState
-  {
+  enum ClientState {
+    LOG_COLL_CLIENT_START,
     LOG_COLL_CLIENT_AUTH,
     LOG_COLL_CLIENT_DNS,
     LOG_COLL_CLIENT_DONE,
@@ -69,57 +66,54 @@ private:
     LOG_COLL_CLIENT_SEND
   };
 
-  enum ClientFlowControl
-  {
+  enum ClientFlowControl {
     LOG_COLL_FLOW_ALLOW,
-    LOG_COLL_FLOW_DENY
+    LOG_COLL_FLOW_DENY,
   };
 
 private:
-
   // client states
-  int client_auth(int event, VIO * vio);
-  int client_dns(int event, HostDBInfo * hostdb_info);
+  int client_auth(int event, VIO *vio);
+  int client_dns(int event, HostDBInfo *hostdb_info);
   int client_done(int event, void *data);
   int client_fail(int event, void *data);
   int client_idle(int event, void *data);
   int client_init(int event, void *data);
-  int client_open(int event, NetVConnection * net_vc);
-  int client_send(int event, VIO * vio);
-  ClientState m_client_state;
+  int client_open(int event, NetVConnection *net_vc);
+  int client_send(int event, VIO *vio);
+  ClientState m_client_state = LOG_COLL_CLIENT_START;
 
   // support functions
   void flush_to_orphan();
 
   // iocore stuff (two buffers to avoid races)
-  NetVConnection *m_host_vc;
-  VIO *m_host_vio;
-  MIOBuffer *m_auth_buffer;
-  IOBufferReader *m_auth_reader;
-  MIOBuffer *m_send_buffer;
-  IOBufferReader *m_send_reader;
-  Action *m_pending_action;
-  Event *m_pending_event;
+  NetVConnection *m_host_vc     = nullptr;
+  VIO *m_host_vio               = nullptr;
+  MIOBuffer *m_auth_buffer      = nullptr;
+  IOBufferReader *m_auth_reader = nullptr;
+  MIOBuffer *m_send_buffer      = nullptr;
+  IOBufferReader *m_send_reader = nullptr;
+  Action *m_pending_action      = nullptr;
+  Event *m_pending_event        = nullptr;
 
   // to detect server closes (there's got to be a better way to do this)
-  VIO *m_abort_vio;
-  MIOBuffer *m_abort_buffer;
-  bool m_host_is_up;
+  VIO *m_abort_vio          = nullptr;
+  MIOBuffer *m_abort_buffer = nullptr;
+  bool m_host_is_up         = false;
 
   // send stuff
-  LogBufferList *m_buffer_send_list;
-  LogBuffer *m_buffer_in_iocore;
-  ClientFlowControl m_flow;
+  LogBufferList *m_buffer_send_list = nullptr;
+  LogBuffer *m_buffer_in_iocore     = nullptr;
+  ClientFlowControl m_flow          = LOG_COLL_FLOW_ALLOW;
 
   // back pointer to LogHost container
   LogHost *m_log_host;
 
   // debugging
   static int ID;
-  int m_id;
-
+  int m_id = 0;
 };
 
-typedef int (LogCollationClientSM::*LogCollationClientSMHandler) (int, void *);
+typedef int (LogCollationClientSM::*LogCollationClientSMHandler)(int, void *);
 
 #endif // LOG_COLLATION_CLIENT_SM_H

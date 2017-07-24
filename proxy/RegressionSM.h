@@ -25,6 +25,8 @@
 #define _RegressionSM_h
 
 #include "I_EventSystem.h"
+#include "ts/Regression.h"
+#include "ts/DynArray.h"
 
 /*
   Regression Test Composition State Machine
@@ -32,13 +34,16 @@
   See RegressionSM.cc at the end for an example
 */
 
-struct RegressionSM :  public Continuation {
-
-  RegressionTest *t; // for use with rprint
+struct RegressionSM : public Continuation {
+  RegressionTest *t = nullptr; // for use with rprint
 
   // methods to override
   virtual void run(); // replace with leaf regression
-  virtual RegressionSM *clone() { return new RegressionSM(*this); } // replace for run_xxx(int n,...);
+  virtual RegressionSM *
+  clone()
+  {
+    return new RegressionSM(*this);
+  } // replace for run_xxx(int n,...);
 
   // public API
   void done(int status = REGRESSION_TEST_NOT_RUN);
@@ -46,15 +51,17 @@ struct RegressionSM :  public Continuation {
   void run_in(int *pstatus, ink_hrtime t);
 
   // internal
-  int status;
-  int *pstatus;
-  RegressionSM *parent;
-  int nwaiting;
-  int nchildren;
-  DynArray<RegressionSM*> children;
-  intptr_t n, ichild;
-  bool par, rep;
-  Action *pending_action;
+  int status                        = REGRESSION_TEST_INPROGRESS;
+  int *pstatus                      = nullptr;
+  RegressionSM *parent              = nullptr;
+  int nwaiting                      = 0;
+  int nchildren                     = 0;
+  DynArray<RegressionSM *> children = nullptr;
+  intptr_t n                        = 0;
+  intptr_t ichild                   = 0;
+  bool parallel                     = false;
+  bool repeat                       = false;
+  Action *pending_action            = nullptr;
 
   int regression_sm_start(int event, void *data);
   int regression_sm_waiting(int event, void *data);
@@ -62,13 +69,7 @@ struct RegressionSM :  public Continuation {
   void child_done(int status);
   void xrun(RegressionSM *parent);
 
-  RegressionSM(RegressionTest *at = NULL) :
-    t(at), status(REGRESSION_TEST_INPROGRESS),
-    pstatus(0), parent(0), nwaiting(0), nchildren(0), children(0), ichild(0), par(false), rep(false),
-    pending_action(0)
-  {
-    mutex = new_ProxyMutex();
-  }
+  RegressionSM(RegressionTest *at = NULL) : t(at) { mutex = new_ProxyMutex(); }
 
   RegressionSM(const RegressionSM &);
 };

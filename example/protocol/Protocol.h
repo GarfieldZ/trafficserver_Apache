@@ -35,13 +35,17 @@
 
 #include <ts/ts.h>
 
+#define PLUGIN_NAME "protocol"
+
 #define MAX_SERVER_NAME_LENGTH 1024
 #define MAX_FILE_NAME_LENGTH 1024
 
 /* MAX_SERVER_NAME_LENGTH + MAX_FILE_NAME_LENGTH + strlen("\n\n") */
 #define MAX_REQUEST_LENGTH 2050
 
-#define set_handler(_d, _s) {_d = _s;}
-
+#define set_handler(_d, _s) \
+  {                         \
+    _d = _s;                \
+  }
 
 #endif /* PROTOCOL_H */

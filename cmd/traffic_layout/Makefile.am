@@ -17,14 +17,15 @@
 
 bin_PROGRAMS = traffic_layout
 
-AM_CPPFLAGS = \
+AM_CPPFLAGS += \
   $(iocore_include_dirs) \
-  -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib \
-  -I$(top_srcdir)/lib/ts \
-  -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/mgmt \
-  -I$(top_srcdir)/mgmt/utils
+  -I$(abs_top_srcdir)/lib \
+  -I$(abs_top_srcdir)/lib/records \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/utils
+
+AM_LDFLAGS += \
+  @OPENSSL_LDFLAGS@
 
 traffic_layout_SOURCES = \
   traffic_layout.cc
@@ -32,7 +33,12 @@ traffic_layout_SOURCES = \
 traffic_layout_LDADD = \
   $(top_builddir)/lib/records/librecords_p.a \
   $(top_builddir)/mgmt/libmgmt_p.la \
-  $(top_builddir)/iocore/eventsystem/libinkevent.a \
   $(top_builddir)/proxy/shared/libUglyLogStubs.a \
+  $(top_builddir)/iocore/eventsystem/libinkevent.a \
   $(top_builddir)/lib/ts/libtsutil.la \
   @LIBTCL@ @HWLOC_LIBS@
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

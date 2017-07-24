@@ -16,35 +16,66 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-AM_CPPFLAGS = \
+AM_CPPFLAGS += \
   $(iocore_include_dirs) \
-  -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib \
-  -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
-  -I$(top_srcdir)/proxy \
-  -I$(top_srcdir)/proxy/hdrs \
-  -I$(top_srcdir)/proxy/shared \
-  -I$(top_srcdir)/mgmt \
-  -I$(top_srcdir)/mgmt/utils \
-  -I$(top_srcdir)/proxy/api/ts \
-  -I$(top_srcdir)/proxy/http
+  -I$(abs_top_srcdir)/lib \
+  -I$(abs_top_srcdir)/lib/records \
+  -I$(abs_top_srcdir)/proxy \
+  -I$(abs_top_srcdir)/proxy/hdrs \
+  -I$(abs_top_srcdir)/proxy/shared \
+  -I$(abs_top_srcdir)/proxy/logging \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/utils \
+  -I$(abs_top_srcdir)/proxy/http \
+  @OPENSSL_INCLUDES@
 
 TESTS = $(check_PROGRAMS)
 
-check_PROGRAMS = test_certlookup
+check_PROGRAMS = test_certlookup test_UDPNet
 noinst_LIBRARIES = libinknet.a
+
+test_certlookup_LDFLAGS = \
+  @AM_LDFLAGS@ \
+  @OPENSSL_LDFLAGS@
 
 test_certlookup_SOURCES = \
   test_certlookup.cc \
   SSLCertLookup.cc
 
 test_certlookup_LDADD = \
+  @OPENSSL_LIBS@ \
   $(top_builddir)/lib/ts/libtsutil.la \
+  $(top_builddir)/iocore/eventsystem/libinkevent.a
+
+test_UDPNet_CPPFLAGS = \
+  $(AM_CPPFLAGS) \
+  $(iocore_include_dirs) \
+  -I$(abs_top_srcdir)/proxy \
+  -I$(abs_top_srcdir)/proxy/hdrs \
+  -I$(abs_top_srcdir)/proxy/http \
+  -I$(abs_top_srcdir)/proxy/logging \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/utils \
+  @OPENSSL_INCLUDES@
+
+test_UDPNet_LDFLAGS = \
+  @AM_LDFLAGS@ \
+  @OPENSSL_LDFLAGS@
+
+test_UDPNet_LDADD = \
+  libinknet.a \
   $(top_builddir)/iocore/eventsystem/libinkevent.a \
-  @OPENSSL_LIBS@
+  $(top_builddir)/mgmt/libmgmt_p.la \
+  $(top_builddir)/lib/records/librecords_p.a \
+  $(top_builddir)/lib/ts/libtsutil.la \
+  @LIBTCL@ @HWLOC_LIBS@
+
+test_UDPNet_SOURCES = \
+  test_I_UDPNet.cc
 
 libinknet_a_SOURCES = \
+  BIO_fastopen.cc \
+  BIO_fastopen.h \
   Connection.cc \
   I_Net.h \
   I_NetProcessor.h \
@@ -55,6 +86,7 @@ libinknet_a_SOURCES = \
   I_UDPPacket.h \
   Inline.cc \
   I_SessionAccept.h \
+  SessionAccept.cc \
   Net.cc \
   NetVConnection.cc \
   P_CompletionUtil.h \
@@ -73,6 +105,7 @@ libinknet_a_SOURCES = \
   P_SSLNextProtocolAccept.h \
   P_SSLNextProtocolSet.h \
   P_SSLUtils.h \
+  P_SSLClientUtils.h \
   P_OCSPStapling.h \
   P_Socks.h \
   P_UDPConnection.h \
@@ -97,6 +130,7 @@ libinknet_a_SOURCES = \
   SSLNextProtocolAccept.cc \
   SSLNextProtocolSet.cc \
   SSLUtils.cc \
+  SSLClientUtils.cc \
   OCSPStapling.cc \
   Socks.cc \
   UDPIOEvent.cc \
@@ -107,17 +141,21 @@ libinknet_a_SOURCES = \
   UnixNetProcessor.cc \
   UnixNetVConnection.cc \
   UnixUDPConnection.cc \
-  UnixUDPNet.cc
+  UnixUDPNet.cc \
+  SSLDynlock.cc
 
 #test_UNUSED_SOURCES = \
 #  NetTest-http-server.c \
 #  test_I_Net.cc \
-#  test_I_UDPNet.cc \
-#  test_P_Net.cc \
-#  test_P_UDPNet.cc
+#  test_P_Net.cc
 
 if BUILD_TESTS
   libinknet_a_SOURCES += \
      NetVCTest.cc \
      P_NetVCTest.h
 endif
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

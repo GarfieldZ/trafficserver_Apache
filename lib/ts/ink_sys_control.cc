@@ -21,9 +21,11 @@
   limitations under the License.
  */
 
-#include "ink_defs.h"
-#include "ink_assert.h"
-#include "ink_sys_control.h"
+#include <cmath>
+
+#include "ts/ink_defs.h"
+#include "ts/ink_assert.h"
+#include "ts/ink_sys_control.h"
 
 rlim_t
 ink_max_out_rlimit(int which, bool max_it, bool unlim_it)
@@ -31,9 +33,9 @@ ink_max_out_rlimit(int which, bool max_it, bool unlim_it)
   struct rlimit rl;
 
 #if defined(linux)
-#  define MAGIC_CAST(x) (enum __rlimit_resource)(x)
+#define MAGIC_CAST(x) (enum __rlimit_resource)(x)
 #else
-#  define MAGIC_CAST(x) x
+#define MAGIC_CAST(x) x
 #endif
 
   if (max_it) {
@@ -41,7 +43,7 @@ ink_max_out_rlimit(int which, bool max_it, bool unlim_it)
     if (rl.rlim_cur != rl.rlim_max) {
 #if defined(darwin)
       if (which == RLIMIT_NOFILE)
-        rl.rlim_cur = fmin(OPEN_MAX, rl.rlim_max);
+        rl.rlim_cur = (OPEN_MAX < rl.rlim_max) ? OPEN_MAX : rl.rlim_max;
       else
         rl.rlim_cur = rl.rlim_max;
 #else
@@ -51,7 +53,7 @@ ink_max_out_rlimit(int which, bool max_it, bool unlim_it)
     }
   }
 
-#if !defined(darwin)
+#if !(defined(darwin) || defined(freebsd))
   if (unlim_it) {
     ink_release_assert(getrlimit(MAGIC_CAST(which), &rl) >= 0);
     if (rl.rlim_cur != (rlim_t)RLIM_INFINITY) {
@@ -71,7 +73,7 @@ ink_get_max_files()
   struct rlimit lim;
 
   // Linux-only ...
-  if ((fd = fopen("/proc/sys/fs/file-max","r"))) {
+  if ((fd = fopen("/proc/sys/fs/file-max", "r"))) {
     uint64_t fmax;
     if (fscanf(fd, "%" PRIu64 "", &fmax) == 1) {
       fclose(fd);

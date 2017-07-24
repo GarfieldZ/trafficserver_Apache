@@ -15,28 +15,39 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# We only build tstop if libcurses and libcurl are available.
-if BUILD_TSTOP
+# We only build traffic_top if libcurses and libcurl are available.
+if BUILD_TRAFFIC_TOP
 
-AM_CPPFLAGS = \
+AM_CPPFLAGS += \
   $(iocore_include_dirs) \
-  -I$(top_srcdir)/lib -I$(top_builddir)/lib \
-  -I$(top_srcdir)/lib/ts -I$(top_builddir)/lib/ts \
-  -I$(top_srcdir)/mgmt/api/include \
-  @CURL_CFLAGS@
+  -I$(abs_top_srcdir)/lib \
+  -I$(abs_top_srcdir)/lib/records \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/api/include \
+  @CURL_CFLAGS@ \
+  @CURSES_CFLAGS@
 
+AM_LDFLAGS += \
+  @OPENSSL_LDFLAGS@
 
 bin_PROGRAMS = traffic_top
 
 traffic_top_SOURCES = traffic_top.cc
 
-traffic_top_LDFLAGS = @EXTRA_CXX_LDFLAGS@ @LIBTOOL_LINK_FLAGS@
 traffic_top_LDADD = \
+  $(top_builddir)/lib/records/librecords_p.a \
+  $(top_builddir)/mgmt/libmgmt_p.la \
+  $(top_builddir)/iocore/eventsystem/libinkevent.a \
+  $(top_builddir)/proxy/shared/libUglyLogStubs.a \
   $(top_builddir)/mgmt/api/libtsmgmt.la \
-  @CURL_LIBS@ @CURSES_LIB@
-
-# Install a compatibility symlink because traffic_top was named tstop in previous releases.
-install-exec-hook:
-	cd $(DESTDIR)$(bindir) && $(RM) tstop && $(LN_S) traffic_top tstop
+  $(top_builddir)/lib/ts/libtsutil.la \
+  @CURL_LIBS@ \
+  @CURSES_LIBS@ \
+  @LIBTCL@ @HWLOC_LIBS@
 
 endif
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

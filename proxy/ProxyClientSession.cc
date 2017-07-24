@@ -27,10 +27,27 @@
 
 static int64_t next_cs_id = 0;
 
-ProxyClientSession::ProxyClientSession()
-    : VConnection(NULL), debug_on(false), hooks_on(true)
+ProxyClientSession::ProxyClientSession() : VConnection(nullptr)
 {
   ink_zero(this->user_args);
+}
+
+void
+ProxyClientSession::set_session_active()
+{
+  if (!m_active) {
+    m_active = true;
+    HTTP_INCREMENT_DYN_STAT(http_current_active_client_connections_stat);
+  }
+}
+
+void
+ProxyClientSession::clear_session_active()
+{
+  if (m_active) {
+    m_active = false;
+    HTTP_DECREMENT_DYN_STAT(http_current_active_client_connections_stat);
+  }
 }
 
 int64_t
@@ -40,67 +57,79 @@ ProxyClientSession::next_connection_id()
 }
 
 static const TSEvent eventmap[TS_HTTP_LAST_HOOK + 1] = {
-  TS_EVENT_HTTP_READ_REQUEST_HDR,       // TS_HTTP_READ_REQUEST_HDR_HOOK
-  TS_EVENT_HTTP_OS_DNS,                 // TS_HTTP_OS_DNS_HOOK
-  TS_EVENT_HTTP_SEND_REQUEST_HDR,       // TS_HTTP_SEND_REQUEST_HDR_HOOK
-  TS_EVENT_HTTP_READ_CACHE_HDR,         // TS_HTTP_READ_CACHE_HDR_HOOK
-  TS_EVENT_HTTP_READ_RESPONSE_HDR,      // TS_HTTP_READ_RESPONSE_HDR_HOOK
-  TS_EVENT_HTTP_SEND_RESPONSE_HDR,      // TS_HTTP_SEND_RESPONSE_HDR_HOOK
-  TS_EVENT_HTTP_REQUEST_TRANSFORM,      // TS_HTTP_REQUEST_TRANSFORM_HOOK
-  TS_EVENT_HTTP_RESPONSE_TRANSFORM,     // TS_HTTP_RESPONSE_TRANSFORM_HOOK
-  TS_EVENT_HTTP_SELECT_ALT,             // TS_HTTP_SELECT_ALT_HOOK
-  TS_EVENT_HTTP_TXN_START,              // TS_HTTP_TXN_START_HOOK
-  TS_EVENT_HTTP_TXN_CLOSE,              // TS_HTTP_TXN_CLOSE_HOOK
-  TS_EVENT_HTTP_SSN_START,              // TS_HTTP_SSN_START_HOOK
-  TS_EVENT_HTTP_SSN_CLOSE,              // TS_HTTP_SSN_CLOSE_HOOK
-  TS_EVENT_HTTP_CACHE_LOOKUP_COMPLETE,  // TS_HTTP_CACHE_LOOKUP_COMPLETE_HOOK
-  TS_EVENT_HTTP_PRE_REMAP,              // TS_HTTP_PRE_REMAP_HOOK
-  TS_EVENT_HTTP_POST_REMAP,             // TS_HTTP_POST_REMAP_HOOK
-  TS_EVENT_NONE,                        // TS_HTTP_RESPONSE_CLIENT_HOOK
-  TS_EVENT_NONE,                        // TS_HTTP_LAST_HOOK
+  TS_EVENT_HTTP_READ_REQUEST_HDR,      // TS_HTTP_READ_REQUEST_HDR_HOOK
+  TS_EVENT_HTTP_OS_DNS,                // TS_HTTP_OS_DNS_HOOK
+  TS_EVENT_HTTP_SEND_REQUEST_HDR,      // TS_HTTP_SEND_REQUEST_HDR_HOOK
+  TS_EVENT_HTTP_READ_CACHE_HDR,        // TS_HTTP_READ_CACHE_HDR_HOOK
+  TS_EVENT_HTTP_READ_RESPONSE_HDR,     // TS_HTTP_READ_RESPONSE_HDR_HOOK
+  TS_EVENT_HTTP_SEND_RESPONSE_HDR,     // TS_HTTP_SEND_RESPONSE_HDR_HOOK
+  TS_EVENT_HTTP_REQUEST_TRANSFORM,     // TS_HTTP_REQUEST_TRANSFORM_HOOK
+  TS_EVENT_HTTP_RESPONSE_TRANSFORM,    // TS_HTTP_RESPONSE_TRANSFORM_HOOK
+  TS_EVENT_HTTP_SELECT_ALT,            // TS_HTTP_SELECT_ALT_HOOK
+  TS_EVENT_HTTP_TXN_START,             // TS_HTTP_TXN_START_HOOK
+  TS_EVENT_HTTP_TXN_CLOSE,             // TS_HTTP_TXN_CLOSE_HOOK
+  TS_EVENT_HTTP_SSN_START,             // TS_HTTP_SSN_START_HOOK
+  TS_EVENT_HTTP_SSN_CLOSE,             // TS_HTTP_SSN_CLOSE_HOOK
+  TS_EVENT_HTTP_CACHE_LOOKUP_COMPLETE, // TS_HTTP_CACHE_LOOKUP_COMPLETE_HOOK
+  TS_EVENT_HTTP_PRE_REMAP,             // TS_HTTP_PRE_REMAP_HOOK
+  TS_EVENT_HTTP_POST_REMAP,            // TS_HTTP_POST_REMAP_HOOK
+  TS_EVENT_NONE,                       // TS_HTTP_RESPONSE_CLIENT_HOOK
+  TS_EVENT_NONE,                       // TS_HTTP_LAST_HOOK
 };
 
 static bool
-is_valid_hook(TSHttpHookID hookid) {
+is_valid_hook(TSHttpHookID hookid)
+{
   return (hookid >= 0) && (hookid < TS_HTTP_LAST_HOOK);
 }
 
 void
-ProxyClientSession::cleanup()
+ProxyClientSession::free()
 {
+  if (schedule_event) {
+    schedule_event->cancel();
+    schedule_event = nullptr;
+  }
   this->api_hooks.clear();
   this->mutex.clear();
 }
 
 int
-ProxyClientSession::state_api_callout(int event, void * /* data ATS_UNUSED */)
+ProxyClientSession::state_api_callout(int event, void *data)
 {
+  Event *e = static_cast<Event *>(data);
+  if (e == schedule_event) {
+    schedule_event = nullptr;
+  }
+
   switch (event) {
   case EVENT_NONE:
   case EVENT_INTERVAL:
   case TS_EVENT_HTTP_CONTINUE:
     if (likely(is_valid_hook(this->api_hookid))) {
-      if (this->api_current == NULL && this->api_scope == API_HOOK_SCOPE_GLOBAL) {
+      if (this->api_current == nullptr && this->api_scope == API_HOOK_SCOPE_GLOBAL) {
         this->api_current = http_global_hooks->get(this->api_hookid);
-        this->api_scope = API_HOOK_SCOPE_LOCAL;
+        this->api_scope   = API_HOOK_SCOPE_LOCAL;
       }
 
-      if (this->api_current == NULL && this->api_scope == API_HOOK_SCOPE_LOCAL) {
+      if (this->api_current == nullptr && this->api_scope == API_HOOK_SCOPE_LOCAL) {
         this->api_current = ssn_hook_get(this->api_hookid);
-        this->api_scope = API_HOOK_SCOPE_NONE;
+        this->api_scope   = API_HOOK_SCOPE_NONE;
       }
 
       if (this->api_current) {
-        bool            plugin_lock = false;
-        APIHook *       hook = this->api_current;
+        bool plugin_lock = false;
+        APIHook *hook    = this->api_current;
         Ptr<ProxyMutex> plugin_mutex;
 
         if (hook->m_cont->mutex) {
           plugin_mutex = hook->m_cont->mutex;
-          plugin_lock = MUTEX_TAKE_TRY_LOCK(hook->m_cont->mutex, mutex->thread_holding);
+          plugin_lock  = MUTEX_TAKE_TRY_LOCK(hook->m_cont->mutex, mutex->thread_holding);
           if (!plugin_lock) {
             SET_HANDLER(&ProxyClientSession::state_api_callout);
-            mutex->thread_holding->schedule_in(this, HRTIME_MSECONDS(10));
+            if (!schedule_event) { // Don't bother to schedule is there is already one out.
+              schedule_event = mutex->thread_holding->schedule_in(this, HRTIME_MSECONDS(10));
+            }
             return 0;
           }
         }
@@ -125,7 +154,7 @@ ProxyClientSession::state_api_callout(int event, void * /* data ATS_UNUSED */)
 
   // coverity[unterminated_default]
   default:
-    ink_assert(false);
+    ink_release_assert(false);
   }
 
   return 0;
@@ -136,13 +165,13 @@ ProxyClientSession::do_api_callout(TSHttpHookID id)
 {
   ink_assert(id == TS_HTTP_SSN_START_HOOK || id == TS_HTTP_SSN_CLOSE_HOOK);
 
-  this->api_hookid = id;
-  this->api_scope = API_HOOK_SCOPE_GLOBAL;
-  this->api_current = NULL;
+  this->api_hookid  = id;
+  this->api_scope   = API_HOOK_SCOPE_GLOBAL;
+  this->api_current = nullptr;
 
   if (this->hooks_on && this->has_hooks()) {
     SET_HANDLER(&ProxyClientSession::state_api_callout);
-    this->state_api_callout(EVENT_NONE, NULL);
+    this->state_api_callout(EVENT_NONE, nullptr);
   } else {
     this->handle_api_return(TS_EVENT_HTTP_CONTINUE);
   }
@@ -155,9 +184,9 @@ ProxyClientSession::handle_api_return(int event)
 
   SET_HANDLER(&ProxyClientSession::state_api_callout);
 
-  this->api_hookid = TS_HTTP_LAST_HOOK;
-  this->api_scope = API_HOOK_SCOPE_NONE;
-  this->api_current = NULL;
+  this->api_hookid  = TS_HTTP_LAST_HOOK;
+  this->api_scope   = API_HOOK_SCOPE_NONE;
+  this->api_current = nullptr;
 
   switch (hookid) {
   case TS_HTTP_SSN_START_HOOK:
@@ -167,9 +196,15 @@ ProxyClientSession::handle_api_return(int event)
       this->start();
     }
     break;
-  case TS_HTTP_SSN_CLOSE_HOOK:
-    this->destroy();
+  case TS_HTTP_SSN_CLOSE_HOOK: {
+    NetVConnection *vc = this->get_netvc();
+    if (vc) {
+      vc->do_io_close();
+      this->release_netvc();
+    }
+    free(); // You can now clean things up
     break;
+  }
   default:
     Fatal("received invalid session hook %s (%d)", HttpDebugNames::get_api_hook_name(hookid), hookid);
     break;

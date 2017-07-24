@@ -19,18 +19,15 @@
   limitations under the License.
  */
 
-#include "ink_config.h"
+#include "ts/ink_config.h"
 #include "P_Net.h"
 
-typedef int (SSLNetAccept::*SSLNetAcceptHandler) (int, void *);
-
-// Virtual function allows the correct
-// etype to be used in NetAccept functions (ET_SSL
-// or ET_NET).
-EventType
-SSLNetAccept::getEtype() const
+SSLNetAccept::SSLNetAccept(const NetProcessor::AcceptOptions &opt) : NetAccept(opt)
 {
-  return SSLNetProcessor::ET_SSL;
+}
+
+SSLNetAccept::~SSLNetAccept()
+{
 }
 
 NetProcessor *
@@ -39,40 +36,11 @@ SSLNetAccept::getNetProcessor() const
   return &sslNetProcessor;
 }
 
-void
-SSLNetAccept::init_accept_per_thread()
-{
-  int i, n;
-  NetAccept *a;
-
-  if (do_listen(NON_BLOCKING))
-    return;
-  if (accept_fn == net_accept)
-    SET_HANDLER((SSLNetAcceptHandler) & SSLNetAccept::acceptFastEvent);
-  else
-    SET_HANDLER((SSLNetAcceptHandler) & SSLNetAccept::acceptEvent);
-  period = ACCEPT_PERIOD;
-  n = eventProcessor.n_threads_for_type[SSLNetProcessor::ET_SSL];
-  for (i = 0; i < n; i++) {
-    if (i < n - 1)
-      a = clone();
-    else
-      a = this;
-    EThread *t = eventProcessor.eventthread[SSLNetProcessor::ET_SSL][i];
-
-    PollDescriptor *pd = get_PollDescriptor(t);
-    if (ep.start(pd, this, EVENTIO_READ) < 0)
-      Debug("iocore_net", "error starting EventIO");
-    a->mutex = get_NetHandler(t)->mutex;
-    t->schedule_every(a, period, etype);
-  }
-}
-
 NetAccept *
 SSLNetAccept::clone() const
 {
   NetAccept *na;
-  na = new SSLNetAccept;
+  na  = new SSLNetAccept(opt);
   *na = *this;
   return na;
 }

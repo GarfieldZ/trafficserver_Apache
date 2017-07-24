@@ -20,21 +20,26 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 */
-#include <stdint.h>
-#include "Map.h"
+#include <cstdint>
+#include "ts/Map.h"
+#include <list>
 
-typedef const char cchar;
+using cchar = const char;
 
 struct Item {
   LINK(Item, m_link);
   struct Hash {
-    typedef uint32_t ID;
-    typedef uint32_t Key;
-    typedef Item Value;
-    typedef DList(Item, m_link) ListHead;
+    using ID       = uint32_t;
+    using Key      = uint32_t;
+    using Value    = Item;
+    using ListHead = DLL<Item, Item::Link_m_link>;
 
-    static ID hash(Key key) { return key; }
-    static Key key(Value*);
+    static ID
+    hash(Key key)
+    {
+      return key;
+    }
+    static Key key(Value *);
     static bool equal(Key lhs, Key rhs);
   };
 
@@ -45,104 +50,126 @@ struct Item {
   Item(uint32_t key, uint32_t value) : _key(key), _value(value) {}
 };
 
-uint32_t Item::Hash::key(Value* v) { return v->_key; }
-bool Item::Hash::equal(Key lhs, Key rhs) { return lhs == rhs; }
+uint32_t
+Item::Hash::key(Value *v)
+{
+  return v->_key;
+}
+bool
+Item::Hash::equal(Key lhs, Key rhs)
+{
+  return lhs == rhs;
+}
 
-typedef TSHashTable<Item::Hash> Table;
+using Table = TSHashTable<Item::Hash>;
 
-void test_TSHashTable() {
+void
+test_TSHashTable()
+{
   static uint32_t const N = 270;
   Table t;
-  Item* item;
+  Item *item = nullptr;
   Table::Location loc;
+  std::list<Item *> to_delete;
 
-  item = new Item(1);
-  t.insert(item);
-  for ( uint32_t i = 2 ; i <= N ; ++i ) {
-    t.insert(new Item(i));
+  for (uint32_t i = 1; i <= N; ++i) {
+    item = new Item(i);
+    t.insert(item);
+    to_delete.push_back(item);
   }
 
-  for ( uint32_t i = 1 ; i <= N ; ++i) {
+  for (uint32_t i = 1; i <= N; ++i) {
     Table::Location l = t.find(i);
     ink_assert(l.isValid());
     ink_assert(i == l->_value);
   }
 
-  ink_assert(!(t.find(N*2).isValid()));
+  ink_assert(!(t.find(N * 2).isValid()));
 
-  loc = t.find(N/2 | 1);
-  if (loc)
+  loc = t.find(N / 2 | 1);
+  if (loc) {
     t.remove(loc);
-  else
-    ink_assert(! "Did not find expected value");
+  } else {
+    ink_assert(!"Did not find expected value");
+  }
 
-  if (! loc)
+  if (!loc) {
     ; // compiler check.
+  }
 
-  ink_assert(!(t.find(N/2 | 1).isValid()));
+  ink_assert(!(t.find(N / 2 | 1).isValid()));
 
-  for ( uint32_t i = 1 ; i <= N ; i += 2) {
+  for (uint32_t i = 1; i <= N; i += 2) {
     t.remove(i);
   }
 
-  for ( uint32_t i = 1 ; i <= N ; ++i) {
+  for (uint32_t i = 1; i <= N; ++i) {
     Table::Location l = t.find(i);
-    if (1 & i) ink_assert(! l.isValid());
-    else ink_assert(l.isValid());
+    if (1 & i) {
+      ink_assert(!l.isValid());
+    } else {
+      ink_assert(l.isValid());
+    }
   }
 
   int n = 0;
-  for ( Table::iterator spot = t.begin(), limit = t.end() ; spot != limit ; ++spot ) {
+  for (Table::iterator spot = t.begin(), limit = t.end(); spot != limit; ++spot) {
     ++n;
     ink_assert((spot->_value & 1) == 0);
   }
-  ink_assert(n == N/2);
+  ink_assert(n == N / 2);
+
+  for (auto it : to_delete) {
+    delete it;
+  }
 }
 
-int main(int /* argc ATS_UNUSED */, char **/*argv ATS_UNUSED */) {
+class testHashMap
+{
+private:
+  HashMap<cchar *, StringHashFns, int> testsh;
+
+public:
+  int
+  get(cchar *ch) const
+  {
+    return testsh.get(ch);
+  }
+
+  void
+  put(cchar *key, int v)
+  {
+    testsh.put(key, v);
+  }
+};
+
+int
+main(int /* argc ATS_UNUSED */, char ** /*argv ATS_UNUSED */)
+{
   typedef Map<cchar *, cchar *> SSMap;
   typedef MapElem<cchar *, cchar *> SSMapElem;
+  testHashMap testsh;
 #define form_SSMap(_p, _v) form_Map(SSMapElem, _p, _v)
   SSMap ssm;
   ssm.put("a", "A");
   ssm.put("b", "B");
   ssm.put("c", "C");
   ssm.put("d", "D");
-  form_SSMap(x, ssm) { /* nop */ }
+  form_SSMap(x, ssm) { /* nop */}
 
-/*
-  if ((ssm).n)
-    for (SSMapElem *qq__x = (SSMapElem*)0, *x = &(ssm).v[0];
-             ((intptr_t)(qq__x) < (ssm).n) && ((x = &(ssm).v[(intptr_t)qq__x]) || 1);
-             qq__x = (SSMapElem*)(((intptr_t)qq__x) + 1))
-          if ((x)->key) {
-            // nop
-          }
-          */
+  /*
+    if ((ssm).n)
+      for (SSMapElem *qq__x = (SSMapElem*)0, *x = &(ssm).v[0];
+               ((intptr_t)(qq__x) < (ssm).n) && ((x = &(ssm).v[(intptr_t)qq__x]) || 1);
+               qq__x = (SSMapElem*)(((intptr_t)qq__x) + 1))
+            if ((x)->key) {
+              // nop
+            }
+            */
 
-  StringChainHash<> h;
   cchar *hi = "hi", *ho = "ho", *hum = "hum", *hhi = "hhi";
-  hhi++;
-  h.put(hi);
-  h.put(ho);
-  ink_assert(h.put(hum) == hum);
-  ink_assert(h.put(hhi) == hi);
-  ink_assert(h.get(hhi) == hi && h.get(hi) == hi && h.get(ho) == ho);
-  ink_assert(h.get("he") == 0 && h.get("hee") == 0);
-  h.del(ho);
-  ink_assert(h.get(ho) == 0);
 
-  StringBlockHash hh;
-  hh.put(hi);
-  hh.put(ho);
-  ink_assert(hh.put(hum) == 0);
-  ink_assert(hh.put(hhi) == hi);
-  ink_assert(hh.get(hhi) == hi && hh.get(hi) == hi && hh.get(ho) == ho);
-  ink_assert(hh.get("he") == 0 && hh.get("hee") == 0);
-  hh.del(hi);
-  ink_assert(hh.get(hhi) == 0);
-  ink_assert(hh.get(hi) == 0);
-
+  ++hhi;
   HashMap<cchar *, StringHashFns, int> sh;
   sh.put(hi, 1);
   sh.put(ho, 2);
@@ -163,38 +190,15 @@ int main(int /* argc ATS_UNUSED */, char **/*argv ATS_UNUSED */) {
   ink_assert(sh.get("af") == 10);
   ink_assert(sh.get("ac") == 7);
 
-  ChainHashMap<cchar *, StringHashFns, int> ssh;
-  ssh.put(hi, 1);
-  ssh.put(ho, 2);
-  ssh.put(hum, 3);
-  ssh.put(hhi, 4);
-  ink_assert(ssh.get(hi) == 4);
-  ink_assert(ssh.get(ho) == 2);
-  ink_assert(ssh.get(hum) == 3);
-  ssh.put("aa", 5);
-  ssh.put("ab", 6);
-  ssh.put("ac", 7);
-  ssh.put("ad", 8);
-  ssh.put("ae", 9);
-  ssh.put("af", 10);
-  ink_assert(ssh.get(hi) == 4);
-  ink_assert(ssh.get(ho) == 2);
-  ink_assert(ssh.get(hum) == 3);
-  ink_assert(ssh.get("af") == 10);
-  ink_assert(ssh.get("ac") == 7);
-  ssh.del(ho);
-  ink_assert(ssh.get(ho) == 0);
-
-  Vec<int> ints;
-  ssh.get_values(ints);
-  ink_assert(ints.n == 8);
-  Vec<cchar *> chars;
-  ssh.get_keys(chars);
-  ink_assert(chars.n == 8);
-
-
+  HashMap<cchar *, StringHashFns, int> sh2(-99); // return -99 if key not found
+  sh2.put("aa", 15);
+  sh2.put("ab", 16);
+  testsh.put("aa", 15);
+  testsh.put("ab", 16);
+  ink_assert(sh2.get("aa") == 15);
+  ink_assert(sh2.get("ac") == -99);
+  ink_assert(testsh.get("aa") == 15);
   test_TSHashTable();
 
   printf("test_Map PASSED\n");
 }
-

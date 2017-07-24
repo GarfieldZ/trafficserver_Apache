@@ -33,15 +33,15 @@
 #ifndef _HTTP_SM_H_
 #define _HTTP_SM_H_
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "P_EventSystem.h"
 #include "HttpCacheSM.h"
 #include "HttpTransact.h"
 #include "HttpTunnel.h"
 #include "InkAPIInternal.h"
-#include "StatSystem.h"
-#include "HttpClientSession.h"
+#include "../ProxyClientTransaction.h"
 #include "HdrUtils.h"
+#include <ts/MemView.h>
 //#include "AuthHttpAdapter.h"
 
 /* Enable LAZY_BUF_ALLOC to delay allocation of buffers until they
@@ -57,8 +57,8 @@
  */
 #define LAZY_BUF_ALLOC
 
-#define HTTP_API_CONTINUE   (INK_API_EVENT_EVENTS_START + 0)
-#define HTTP_API_ERROR      (INK_API_EVENT_EVENTS_START + 1)
+#define HTTP_API_CONTINUE (INK_API_EVENT_EVENTS_START + 0)
+#define HTTP_API_ERROR (INK_API_EVENT_EVENTS_START + 1)
 
 // The default size for http header buffers when we don't
 //   need to include extra space for the document
@@ -75,26 +75,28 @@ class HttpServerSession;
 class AuthHttpAdapter;
 
 class HttpSM;
-typedef int (HttpSM::*HttpSMHandler) (int event, void *data);
+typedef int (HttpSM::*HttpSMHandler)(int event, void *data);
 
-enum HttpVC_t
-{ HTTP_UNKNOWN = 0, HTTP_UA_VC, HTTP_SERVER_VC,
-  HTTP_TRANSFORM_VC, HTTP_CACHE_READ_VC,
-  HTTP_CACHE_WRITE_VC, HTTP_RAW_SERVER_VC
+enum HttpVC_t {
+  HTTP_UNKNOWN = 0,
+  HTTP_UA_VC,
+  HTTP_SERVER_VC,
+  HTTP_TRANSFORM_VC,
+  HTTP_CACHE_READ_VC,
+  HTTP_CACHE_WRITE_VC,
+  HTTP_RAW_SERVER_VC
 };
 
-enum BackgroundFill_t
-{
+enum BackgroundFill_t {
   BACKGROUND_FILL_NONE = 0,
   BACKGROUND_FILL_STARTED,
   BACKGROUND_FILL_ABORTED,
-  BACKGROUND_FILL_COMPLETED
+  BACKGROUND_FILL_COMPLETED,
 };
 
 extern ink_mutex debug_sm_list_mutex;
 
-struct HttpVCTableEntry
-{
+struct HttpVCTableEntry {
   VConnection *vc;
   MIOBuffer *read_buffer;
   MIOBuffer *write_buffer;
@@ -106,8 +108,7 @@ struct HttpVCTableEntry
   bool in_tunnel;
 };
 
-struct HttpVCTable
-{
+struct HttpVCTable {
   static const int vc_table_max_entries = 4;
   HttpVCTable();
 
@@ -127,87 +128,85 @@ inline bool
 HttpVCTable::is_table_clear() const
 {
   for (int i = 0; i < vc_table_max_entries; i++) {
-    if (vc_table[i].vc != NULL) {
+    if (vc_table[i].vc != nullptr) {
       return false;
     }
   }
   return true;
 }
 
-struct HttpTransformInfo
-{
+struct HttpTransformInfo {
   HttpVCTableEntry *entry;
   VConnection *vc;
 
-    HttpTransformInfo():entry(NULL), vc(NULL)
-  {
-  }
+  HttpTransformInfo() : entry(NULL), vc(NULL) {}
 };
-#define HISTORY_SIZE  64
+#define HISTORY_SIZE 64
 
-enum
-{
+enum {
   HTTP_SM_MAGIC_ALIVE = 0x0000FEED,
-  HTTP_SM_MAGIC_DEAD = 0xDEADFEED
+  HTTP_SM_MAGIC_DEAD  = 0xDEADFEED,
 };
 
-enum
-{
-  HTTP_SM_POST_UNKNOWN = 0,
-  HTTP_SM_POST_UA_FAIL = 1,
+enum {
+  HTTP_SM_POST_UNKNOWN     = 0,
+  HTTP_SM_POST_UA_FAIL     = 1,
   HTTP_SM_POST_SERVER_FAIL = 2,
-  HTTP_SM_POST_SUCCESS = 3
+  HTTP_SM_POST_SUCCESS     = 3,
 };
 
-enum
-{
-  HTTP_SM_TRANSFORM_OPEN = 0,
+enum {
+  HTTP_SM_TRANSFORM_OPEN   = 0,
   HTTP_SM_TRANSFORM_CLOSED = 1,
-  HTTP_SM_TRANSFORM_FAIL = 2
+  HTTP_SM_TRANSFORM_FAIL   = 2,
 };
 
-enum HttpApiState_t
-{
+enum HttpApiState_t {
   HTTP_API_NO_CALLOUT,
   HTTP_API_IN_CALLOUT,
   HTTP_API_DEFERED_CLOSE,
-  HTTP_API_DEFERED_SERVER_ERROR
+  HTTP_API_DEFERED_SERVER_ERROR,
 };
 
-
-enum HttpPluginTunnel_t
-{
+enum HttpPluginTunnel_t {
   HTTP_NO_PLUGIN_TUNNEL = 0,
   HTTP_PLUGIN_AS_SERVER,
-  HTTP_PLUGIN_AS_INTERCEPT
+  HTTP_PLUGIN_AS_INTERCEPT,
 };
 
 class CoreUtils;
 class PluginVCCore;
 
-class HttpSM: public Continuation
+class HttpSM : public Continuation
 {
   friend class HttpPagesHandler;
   friend class CoreUtils;
+
 public:
   HttpSM();
   void cleanup();
   virtual void destroy();
 
   static HttpSM *allocate();
-  HttpCacheSM & get_cache_sm();       //Added to get the object of CacheSM YTS Team, yamsat
-  HttpVCTableEntry *get_ua_entry();     //Added to get the ua_entry pointer  - YTS-TEAM
-  static void _instantiate_func(HttpSM * prototype, HttpSM * new_instance);
-  static void _make_scatter_list(HttpSM * prototype);
+  HttpCacheSM &get_cache_sm();      // Added to get the object of CacheSM YTS Team, yamsat
+  HttpVCTableEntry *get_ua_entry(); // Added to get the ua_entry pointer  - YTS-TEAM
 
   void init();
 
-  void attach_client_session(HttpClientSession * client_vc_arg, IOBufferReader * buffer_reader);
+  void attach_client_session(ProxyClientTransaction *client_vc_arg, IOBufferReader *buffer_reader);
 
   // Called by httpSessionManager so that we can reset
   //  the session timeouts and initiate a read while
   //  holding the lock for the server session
-  void attach_server_session(HttpServerSession * s);
+  void attach_server_session(HttpServerSession *s);
+
+  // Used to read attributes of
+  // the current active server session
+  HttpServerSession *
+  get_server_session()
+  {
+    return server_session;
+  }
 
   // Called by transact.  Updates are fire and forget
   //  so there are no callbacks and are safe to do
@@ -221,7 +220,7 @@ public:
 
   void do_range_parse(MIMEField *range_field);
   void calculate_output_cl(int64_t, int64_t);
-  void parse_range_and_compare(MIMEField*, int64_t);
+  void parse_range_and_compare(MIMEField *, int64_t);
 
   // Called by transact to prevent reset problems
   //  failed PUSH requests
@@ -232,12 +231,20 @@ public:
   // Handles the setting of all state necessary before
   //   calling transact to process the hostdb lookup
   // A NULL 'r' argument indicates the hostdb lookup failed
-  void process_hostdb_info(HostDBInfo * r);
-  void process_srv_info(HostDBInfo * r);
+  void process_hostdb_info(HostDBInfo *r);
+  void process_srv_info(HostDBInfo *r);
 
   // Called by transact.  Synchronous.
   VConnection *do_transform_open();
   VConnection *do_post_transform_open();
+
+  // Called by transact(HttpTransact::is_request_retryable), temperarily.
+  // This function should be remove after #1994 fixed.
+  bool
+  is_post_transform_request()
+  {
+    return t_state.method == HTTP_WKSIDX_POST && post_transform_info.vc;
+  }
 
   // Called from InkAPI.cc which acquires the state machine lock
   //  before calling
@@ -245,93 +252,106 @@ public:
   int state_api_callout(int event, void *data);
 
   // Used for Http Stat Pages
-  HttpTunnel *get_tunnel()
+  HttpTunnel *
+  get_tunnel()
   {
     return &tunnel;
-  };
+  }
 
   // Debugging routines to dump the SM history, hdrs
   void dump_state_on_assert();
   void dump_state_hdr(HTTPHdr *h, const char *s);
 
   // Functions for manipulating api hooks
-  void txn_hook_append(TSHttpHookID id, INKContInternal * cont);
-  void txn_hook_prepend(TSHttpHookID id, INKContInternal * cont);
+  void txn_hook_append(TSHttpHookID id, INKContInternal *cont);
+  void txn_hook_prepend(TSHttpHookID id, INKContInternal *cont);
   APIHook *txn_hook_get(TSHttpHookID id);
 
-  void add_history_entry(const char *fileline, int event, int reentrant);
+  void add_history_entry(const SourceLocation &location, int event, int reentrant);
   void add_cache_sm();
   bool is_private();
   bool is_redirect_required();
 
-  int64_t sm_id;
-  unsigned int magic;
+  /// Get the protocol stack for the inbound (client, user agent) connection.
+  /// @arg result [out] Array to store the results
+  /// @arg n [in] Size of the array @a result.
+  int populate_client_protocol(ts::StringView *result, int n) const;
+  const char *client_protocol_contains(ts::StringView tag_prefix) const;
+  ts::StringView find_proto_string(HTTPVersion version) const;
 
-  //YTS Team, yamsat Plugin
-  bool enable_redirection;      //To check if redirection is enabled
-  char *redirect_url;     //url for force redirect (provide users a functionality to redirect to another url when needed)
-  int redirect_url_len;
-  int redirection_tries;        //To monitor number of redirections
-  int64_t transfered_bytes;     //Added to calculate POST data
-  bool post_failed;             //Added to identify post failure
-  bool debug_on;               //Transaction specific debug flag
+  int64_t sm_id      = -1;
+  unsigned int magic = HTTP_SM_MAGIC_DEAD;
+
+  // YTS Team, yamsat Plugin
+  bool enable_redirection = false; // To check if redirection is enabled
+  char *redirect_url    = nullptr; // url for force redirect (provide users a functionality to redirect to another url when needed)
+  int redirect_url_len  = 0;
+  int redirection_tries = 0;        // To monitor number of redirections
+  int64_t transfered_bytes = 0;     // Added to calculate POST data
+  bool post_failed         = false; // Added to identify post failure
+  bool debug_on            = false; // Transaction specific debug flag
 
   // Tunneling request to plugin
-  HttpPluginTunnel_t plugin_tunnel_type;
-  PluginVCCore *plugin_tunnel;
+  HttpPluginTunnel_t plugin_tunnel_type = HTTP_NO_PLUGIN_TUNNEL;
+  PluginVCCore *plugin_tunnel           = nullptr;
 
   HttpTransact::State t_state;
 
 protected:
-  int reentrancy_count;
+  int reentrancy_count = 0;
 
-  struct History
-  {
-    const char *fileline;
-    unsigned short event;
-    short reentrancy;
+  struct History {
+    SourceLocation location;
+    unsigned short event = 0;
+    short reentrancy     = 0;
   };
   History history[HISTORY_SIZE];
-  int history_pos;
+  int history_pos = 0;
 
   HttpTunnel tunnel;
 
   HttpVCTable vc_table;
 
-  HttpVCTableEntry *ua_entry;
+  HttpVCTableEntry *ua_entry = nullptr;
   void remove_ua_entry();
 
 public:
-  HttpClientSession *ua_session;
-  BackgroundFill_t background_fill;
-  //AuthHttpAdapter authAdapter;
+  ProxyClientTransaction *ua_session = nullptr;
+  BackgroundFill_t background_fill   = BACKGROUND_FILL_NONE;
+  // AuthHttpAdapter authAdapter;
   void set_http_schedule(Continuation *);
   int get_http_schedule(int event, void *data);
 
 protected:
-  IOBufferReader * ua_buffer_reader;
-  IOBufferReader * ua_raw_buffer_reader;
+  IOBufferReader *ua_buffer_reader     = nullptr;
+  IOBufferReader *ua_raw_buffer_reader = nullptr;
 
-  HttpVCTableEntry *server_entry;
-  HttpServerSession *server_session;
-  int shared_session_retries;
-  IOBufferReader *server_buffer_reader;
+  HttpVCTableEntry *server_entry    = nullptr;
+  HttpServerSession *server_session = nullptr;
+
+  /* Because we don't want to take a session from a shared pool if we know that it will be private,
+   * but we cannot set it to private until we have an attached server session.
+   * So we use this variable to indicate that
+   * we should create a new connection and then once we attach the session we'll mark it as private.
+   */
+  bool will_be_private_ss              = false;
+  int shared_session_retries           = 0;
+  IOBufferReader *server_buffer_reader = nullptr;
   void remove_server_entry();
 
   HttpTransformInfo transform_info;
   HttpTransformInfo post_transform_info;
   /// Set if plugin client / user agents are active.
   /// Need primarily for cleanup.
-  bool has_active_plugin_agents;
+  bool has_active_plugin_agents = false;
 
   HttpCacheSM cache_sm;
   HttpCacheSM transform_cache_sm;
-  HttpCacheSM *second_cache_sm;
+  HttpCacheSM *second_cache_sm = nullptr;
 
-  HttpSMHandler default_handler;
-  Action *pending_action;
-  Action *historical_action;
-  Continuation *schedule_cont;
+  HttpSMHandler default_handler = nullptr;
+  Action *pending_action        = nullptr;
+  Continuation *schedule_cont   = nullptr;
 
   HTTPParser http_parser;
   void start_sub_sm();
@@ -341,10 +361,10 @@ protected:
   int tunnel_handler_push(int event, void *data);
   int tunnel_handler_post(int event, void *data);
 
-  //YTS Team, yamsat Plugin
+  // YTS Team, yamsat Plugin
   int tunnel_handler_for_partial_post(int event, void *data);
 
-  void tunnel_handler_post_or_put(HttpTunnelProducer * p);
+  void tunnel_handler_post_or_put(HttpTunnelProducer *p);
 
   int tunnel_handler_100_continue(int event, void *data);
   int tunnel_handler_cache_fill(int event, void *data);
@@ -359,13 +379,12 @@ protected:
   int state_hostdb_reverse_lookup(int event, void *data);
   int state_mark_os_down(int event, void *data);
   int state_handle_stat_page(int event, void *data);
-  int state_icp_lookup(int event, void *data);
   int state_auth_callback(int event, void *data);
   int state_add_to_list(int event, void *data);
   int state_remove_from_list(int event, void *data);
   int state_congestion_control_lookup(int event, void *data);
 
-//Y! ebalsa: remap handlers
+  // Y! ebalsa: remap handlers
   int state_remap_request(int event, void *data);
   void do_remap_request(bool);
 
@@ -383,35 +402,34 @@ protected:
   // API
   int state_request_wait_for_transform_read(int event, void *data);
   int state_response_wait_for_transform_read(int event, void *data);
-  int state_common_wait_for_transform_read(HttpTransformInfo * t_info, HttpSMHandler tunnel_handler, int event, void *data);
+  int state_common_wait_for_transform_read(HttpTransformInfo *t_info, HttpSMHandler tunnel_handler, int event, void *data);
 
   // Tunnel event handlers
-  int tunnel_handler_server(int event, HttpTunnelProducer * p);
-  int tunnel_handler_ua(int event, HttpTunnelConsumer * c);
-  int tunnel_handler_ua_push(int event, HttpTunnelProducer * p);
-  int tunnel_handler_100_continue_ua(int event, HttpTunnelConsumer * c);
-  int tunnel_handler_cache_write(int event, HttpTunnelConsumer * c);
-  int tunnel_handler_cache_read(int event, HttpTunnelProducer * p);
-  int tunnel_handler_post_ua(int event, HttpTunnelProducer * c);
-  int tunnel_handler_post_server(int event, HttpTunnelConsumer * c);
-  int tunnel_handler_ssl_producer(int event, HttpTunnelProducer * p);
-  int tunnel_handler_ssl_consumer(int event, HttpTunnelConsumer * p);
-  int tunnel_handler_transform_write(int event, HttpTunnelConsumer * c);
-  int tunnel_handler_transform_read(int event, HttpTunnelProducer * p);
-  int tunnel_handler_plugin_agent(int event, HttpTunnelConsumer * c);
+  int tunnel_handler_server(int event, HttpTunnelProducer *p);
+  int tunnel_handler_ua(int event, HttpTunnelConsumer *c);
+  int tunnel_handler_ua_push(int event, HttpTunnelProducer *p);
+  int tunnel_handler_100_continue_ua(int event, HttpTunnelConsumer *c);
+  int tunnel_handler_cache_write(int event, HttpTunnelConsumer *c);
+  int tunnel_handler_cache_read(int event, HttpTunnelProducer *p);
+  int tunnel_handler_post_ua(int event, HttpTunnelProducer *c);
+  int tunnel_handler_post_server(int event, HttpTunnelConsumer *c);
+  int tunnel_handler_ssl_producer(int event, HttpTunnelProducer *p);
+  int tunnel_handler_ssl_consumer(int event, HttpTunnelConsumer *p);
+  int tunnel_handler_transform_write(int event, HttpTunnelConsumer *c);
+  int tunnel_handler_transform_read(int event, HttpTunnelProducer *p);
+  int tunnel_handler_plugin_agent(int event, HttpTunnelConsumer *c);
 
   void do_hostdb_lookup();
   void do_hostdb_reverse_lookup();
   void do_cache_lookup_and_read();
   void do_http_server_open(bool raw = false);
+  void send_origin_throttled_response();
   void do_setup_post_tunnel(HttpVC_t to_vc_type);
   void do_cache_prepare_write();
   void do_cache_prepare_write_transform();
   void do_cache_prepare_update();
-  void do_cache_prepare_action(HttpCacheSM * c_sm,
-                               CacheHTTPInfo * object_read_info, bool retry, bool allow_multiple = false);
-  void do_cache_delete_all_alts(Continuation * cont);
-  void do_icp_lookup();
+  void do_cache_prepare_action(HttpCacheSM *c_sm, CacheHTTPInfo *object_read_info, bool retry, bool allow_multiple = false);
+  void do_cache_delete_all_alts(Continuation *cont);
   void do_auth_callout();
   void do_api_callout();
   void do_api_callout_internal();
@@ -427,12 +445,12 @@ protected:
   void handle_server_setup_error(int event, void *data);
   void handle_http_server_open();
   void handle_post_failure();
-  void mark_host_failure(HostDBInfo * info, time_t time_down);
+  void mark_host_failure(HostDBInfo *info, time_t time_down);
   void mark_server_down_on_client_abort();
   void release_server_session(bool serve_from_cache = false);
   void set_ua_abort(HttpTransact::AbortState_t ua_abort, int event);
-  int write_header_into_buffer(HTTPHdr * h, MIOBuffer * b);
-  int write_response_header_into_buffer(HTTPHdr * h, MIOBuffer * b);
+  int write_header_into_buffer(HTTPHdr *h, MIOBuffer *b);
+  int write_response_header_into_buffer(HTTPHdr *h, MIOBuffer *b);
   void setup_blind_tunnel_port();
   void setup_client_header_nca();
   void setup_client_read_request_header();
@@ -441,16 +459,16 @@ protected:
   void setup_cache_lookup_complete_api();
   void setup_server_send_request();
   void setup_server_send_request_api();
-  void setup_server_transfer();
+  HttpTunnelProducer *setup_server_transfer();
   void setup_server_transfer_to_cache_only();
-  void setup_cache_read_transfer();
+  HttpTunnelProducer *setup_cache_read_transfer();
   void setup_internal_transfer(HttpSMHandler handler);
   void setup_error_transfer();
   void setup_100_continue_transfer();
-  void setup_push_transfer_to_cache();
+  HttpTunnelProducer *setup_push_transfer_to_cache();
   void setup_transform_to_server_transfer();
-  void setup_cache_write_transfer(HttpCacheSM * c_sm,
-                                  VConnection * source_vc, HTTPInfo * store_info, int64_t skip_bytes, const char *name);
+  void setup_cache_write_transfer(HttpCacheSM *c_sm, VConnection *source_vc, HTTPInfo *store_info, int64_t skip_bytes,
+                                  const char *name);
   void issue_cache_update();
   void perform_cache_write_action();
   void perform_transform_cache_write_action();
@@ -460,55 +478,67 @@ protected:
   HttpTunnelProducer *setup_transfer_from_transform();
   HttpTunnelProducer *setup_cache_transfer_to_transform();
   HttpTunnelProducer *setup_transfer_from_transform_to_cache_only();
-  void setup_plugin_agents(HttpTunnelProducer* p);
+  void setup_plugin_agents(HttpTunnelProducer *p);
 
-  HttpTransact::StateMachineAction_t last_action;
-  int (HttpSM::*m_last_state) (int event, void *data);
+  HttpTransact::StateMachineAction_t last_action = HttpTransact::SM_ACTION_UNDEFINED;
+  int (HttpSM::*m_last_state)(int event, void *data) = nullptr;
   virtual void set_next_state();
   void call_transact_and_set_next_state(TransactEntryFunc_t f);
 
   bool is_http_server_eos_truncation(HttpTunnelProducer *);
-  bool is_bg_fill_necessary(HttpTunnelConsumer * c);
+  bool is_bg_fill_necessary(HttpTunnelConsumer *c);
   int find_server_buffer_size();
   int find_http_resp_buffer_size(int64_t cl);
-  int64_t server_transfer_init(MIOBuffer * buf, int hdr_size);
+  int64_t server_transfer_init(MIOBuffer *buf, int hdr_size);
 
 public:
+  // TODO:  Now that bodies can be empty, should the body counters be set to -1 ? TS-2213
   // Stats & Logging Info
-  int client_request_hdr_bytes;
-  int64_t client_request_body_bytes;
-  int server_request_hdr_bytes;
-  int64_t server_request_body_bytes;
-  int server_response_hdr_bytes;
-  int64_t server_response_body_bytes;
-  int client_response_hdr_bytes;
-  int64_t client_response_body_bytes;
-  int cache_response_hdr_bytes;
-  int64_t cache_response_body_bytes;
-  int pushed_response_hdr_bytes;
-  int64_t pushed_response_body_bytes;
+  int client_request_hdr_bytes       = 0;
+  int64_t client_request_body_bytes  = 0;
+  int server_request_hdr_bytes       = 0;
+  int64_t server_request_body_bytes  = 0;
+  int server_response_hdr_bytes      = 0;
+  int64_t server_response_body_bytes = 0;
+  int client_response_hdr_bytes      = 0;
+  int64_t client_response_body_bytes = 0;
+  int cache_response_hdr_bytes       = 0;
+  int64_t cache_response_body_bytes  = 0;
+  int pushed_response_hdr_bytes      = 0;
+  int64_t pushed_response_body_bytes = 0;
+  bool client_tcp_reused             = false;
+  // Info about client's SSL connection.
+  bool client_ssl_reused          = false;
+  bool client_connection_is_ssl   = false;
+  const char *client_protocol     = "-";
+  const char *client_sec_protocol = "-";
+  const char *client_cipher_suite = "-";
+  int server_transact_count       = 0;
+  bool server_connection_is_ssl   = false;
+
   TransactionMilestones milestones;
+  ink_hrtime api_timer = 0;
   // The next two enable plugins to tag the state machine for
   // the purposes of logging so the instances can be correlated
   // with the source plugin.
-  char const* plugin_tag;
-  int64_t plugin_id;
+  const char *plugin_tag = nullptr;
+  int64_t plugin_id      = 0;
 
   // hooks_set records whether there are any hooks relevant
   //  to this transaction.  Used to avoid costly calls
   //  do_api_callout_internal()
-  bool hooks_set;
+  bool hooks_set = false;
 
 protected:
-  TSHttpHookID cur_hook_id;
-  APIHook *cur_hook;
+  TSHttpHookID cur_hook_id = TS_HTTP_LAST_HOOK;
+  APIHook *cur_hook        = nullptr;
 
   //
   // Continuation time keeper
-  int64_t prev_hook_start_time;
+  int64_t prev_hook_start_time = 0;
 
-  int cur_hooks;
-  HttpApiState_t callout_state;
+  int cur_hooks                = 0;
+  HttpApiState_t callout_state = HTTP_API_NO_CALLOUT;
 
   // api_hooks must not be changed directly
   //  Use txn_hook_{ap,pre}pend so hooks_set is
@@ -518,13 +548,13 @@ protected:
   // The terminate flag is set by handlers and checked by the
   //   main handler who will terminate the state machine
   //   when the flag is set
-  bool terminate_sm;
-  bool kill_this_async_done;
-  bool parse_range_done;
+  bool terminate_sm         = false;
+  bool kill_this_async_done = false;
+  bool parse_range_done     = false;
   virtual int kill_this_async_hook(int event, void *data);
   void kill_this();
   void update_stats();
-  void transform_cleanup(TSHttpHookID hook, HttpTransformInfo * info);
+  void transform_cleanup(TSHttpHookID hook, HttpTransformInfo *info);
   bool is_transparent_passthrough_allowed();
   void plugin_agents_cleanup();
 
@@ -533,16 +563,21 @@ public:
 
 public:
   bool set_server_session_private(bool private_session);
+  bool
+  is_dying() const
+  {
+    return terminate_sm;
+  }
 };
 
-//Function to get the cache_sm object - YTS Team, yamsat
+// Function to get the cache_sm object - YTS Team, yamsat
 inline HttpCacheSM &
 HttpSM::get_cache_sm()
 {
   return cache_sm;
 }
 
-//Function to get the ua_entry pointer - YTS Team, yamsat
+// Function to get the ua_entry pointer - YTS Team, yamsat
 inline HttpVCTableEntry *
 HttpSM::get_ua_entry()
 {
@@ -552,7 +587,7 @@ HttpSM::get_ua_entry()
 inline HttpSM *
 HttpSM::allocate()
 {
-  extern SparseClassAllocator<HttpSM> httpSMAllocator;
+  extern ClassAllocator<HttpSM> httpSMAllocator;
   return httpSMAllocator.alloc();
 }
 
@@ -573,7 +608,7 @@ HttpSM::remove_server_entry()
 }
 
 inline int
-HttpSM::write_response_header_into_buffer(HTTPHdr * h, MIOBuffer * b)
+HttpSM::write_response_header_into_buffer(HTTPHdr *h, MIOBuffer *b)
 {
   if (t_state.client_info.http_version == HTTPVersion(0, 9)) {
     return 0;
@@ -583,12 +618,12 @@ HttpSM::write_response_header_into_buffer(HTTPHdr * h, MIOBuffer * b)
 }
 
 inline void
-HttpSM::add_history_entry(const char *fileline, int event, int reentrant)
+HttpSM::add_history_entry(const SourceLocation &location, int event, int reentrant)
 {
-  int pos = history_pos++ % HISTORY_SIZE;
-  history[pos].fileline = fileline;
-  history[pos].event = (unsigned short) event;
-  history[pos].reentrancy = (short) reentrant;
+  int pos                 = history_pos++ % HISTORY_SIZE;
+  history[pos].location   = location;
+  history[pos].event      = (unsigned short)event;
+  history[pos].reentrancy = (short)reentrant;
 }
 
 inline int
@@ -598,14 +633,14 @@ HttpSM::find_server_buffer_size()
 }
 
 inline void
-HttpSM::txn_hook_append(TSHttpHookID id, INKContInternal * cont)
+HttpSM::txn_hook_append(TSHttpHookID id, INKContInternal *cont)
 {
   api_hooks.append(id, cont);
   hooks_set = 1;
 }
 
 inline void
-HttpSM::txn_hook_prepend(TSHttpHookID id, INKContInternal * cont)
+HttpSM::txn_hook_prepend(TSHttpHookID id, INKContInternal *cont)
 {
   api_hooks.prepend(id, cont);
   hooks_set = 1;
@@ -623,13 +658,12 @@ HttpSM::add_cache_sm()
   if (second_cache_sm == NULL) {
     second_cache_sm = new HttpCacheSM;
     second_cache_sm->init(this, mutex);
-    second_cache_sm->set_lookup_url(cache_sm.get_lookup_url());
     if (t_state.cache_info.object_read != NULL) {
-      second_cache_sm->cache_read_vc = cache_sm.cache_read_vc;
-      cache_sm.cache_read_vc = NULL;
-      second_cache_sm->read_locked = cache_sm.read_locked;
+      second_cache_sm->cache_read_vc        = cache_sm.cache_read_vc;
+      cache_sm.cache_read_vc                = NULL;
+      second_cache_sm->read_locked          = cache_sm.read_locked;
       t_state.cache_info.second_object_read = t_state.cache_info.object_read;
-      t_state.cache_info.object_read = NULL;
+      t_state.cache_info.object_read        = NULL;
     }
   }
 }
@@ -637,8 +671,7 @@ HttpSM::add_cache_sm()
 inline bool
 HttpSM::is_transparent_passthrough_allowed()
 {
-  return (t_state.client_info.is_transparent &&
-          ua_session->f_transparent_passthrough &&
+  return (t_state.client_info.is_transparent && ua_session->is_transparent_passthrough_allowed() &&
           ua_session->get_transact_count() == 1);
 }
 

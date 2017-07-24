@@ -16,19 +16,18 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-AM_CPPFLAGS = \
+include $(top_srcdir)/build/tidy.mk
+
+AM_CPPFLAGS += \
   $(iocore_include_dirs) \
-  -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib \
-  -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
-  -I$(top_srcdir)/proxy/api/ts \
-  -I$(top_srcdir)/proxy \
-  -I$(top_srcdir)/mgmt \
-  -I$(top_srcdir)/mgmt/utils \
-  -I$(top_srcdir)/proxy/hdrs \
-  -I$(top_srcdir)/proxy/shared \
-  -I$(top_srcdir)/proxy/http
+  -I$(abs_top_srcdir)/lib \
+  -I$(abs_top_srcdir)/lib/records \
+  -I$(abs_top_srcdir)/proxy \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/utils \
+  -I$(abs_top_srcdir)/proxy/hdrs \
+  -I$(abs_top_srcdir)/proxy/shared \
+  -I$(abs_top_srcdir)/proxy/http
 
 noinst_LIBRARIES = libhttp_remap.a
 
@@ -49,3 +48,6 @@ libhttp_remap_a_SOURCES = \
   UrlMappingPathIndex.h \
   UrlRewrite.cc \
   UrlRewrite.h
+
+tidy-local: $(libhttp_remap_a_SOURCES)
+	$(CXX_Clang_Tidy)

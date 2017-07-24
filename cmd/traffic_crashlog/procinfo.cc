@@ -25,7 +25,7 @@
 #include <sys/utsname.h>
 
 static int
-procfd_open(pid_t pid, const char * fname)
+procfd_open(pid_t pid, const char *fname)
 {
   char path[128];
   snprintf(path, sizeof(path), "/proc/%ld/%s", (long)pid, fname);
@@ -33,7 +33,7 @@ procfd_open(pid_t pid, const char * fname)
 }
 
 static char *
-procfd_readlink(pid_t pid, const char * fname)
+procfd_readlink(pid_t pid, const char *fname)
 {
   char path[128];
   ssize_t nbytes;
@@ -43,31 +43,49 @@ procfd_readlink(pid_t pid, const char * fname)
   nbytes = readlink(path, resolved, MAXPATHLEN);
   if (nbytes == -1) {
     Note("readlink failed with %s", strerror(errno));
-    return NULL;
+    return nullptr;
   }
 
   resolved[nbytes] = '\0';
   return resolved.release();
 }
 
-bool
-crashlog_write_regions(FILE * fp, const crashlog_target& target)
+// Suck in a file from /proc/$PID and write it out with the given label.
+static bool
+write_procfd_file(const char *filename, const char *label, FILE *fp, const crashlog_target &target)
 {
   ats_scoped_fd fd;
-  textBuffer text(0);
-
-  fd = procfd_open(target.pid, "maps");
+  TextBuffer text(0);
+  fd = procfd_open(target.pid, filename);
   if (fd != -1) {
     text.slurp(fd);
     text.chomp();
-    fprintf(fp, "Memory Regions:\n%.*s\n", (int)text.spaceUsed(), text.bufPtr());
+    fprintf(fp, "%s:\n%.*s\n", label, (int)text.spaceUsed(), text.bufPtr());
   }
 
   return !text.empty();
 }
 
 bool
-crashlog_write_uname(FILE * fp, const crashlog_target&)
+crashlog_write_regions(FILE *fp, const crashlog_target &target)
+{
+  return write_procfd_file("maps", "Memory Regions", fp, target);
+}
+
+bool
+crashlog_write_procstatus(FILE *fp, const crashlog_target &target)
+{
+  return write_procfd_file("status", "Process Status", fp, target);
+}
+
+bool
+crashlog_write_proclimits(FILE *fp, const crashlog_target &target)
+{
+  return write_procfd_file("limits", "Process Limits", fp, target);
+}
+
+bool
+crashlog_write_uname(FILE *fp, const crashlog_target &)
 {
   struct utsname uts;
 
@@ -81,7 +99,7 @@ crashlog_write_uname(FILE * fp, const crashlog_target&)
 }
 
 bool
-crashlog_write_exename(FILE * fp, const crashlog_target& target)
+crashlog_write_exename(FILE *fp, const crashlog_target &target)
 {
   ats_scoped_str str;
 
@@ -95,11 +113,11 @@ crashlog_write_exename(FILE * fp, const crashlog_target& target)
 }
 
 bool
-crashlog_write_procname(FILE * fp, const crashlog_target& target)
+crashlog_write_procname(FILE *fp, const crashlog_target &target)
 {
-  ats_scoped_fd   fd;
-  ats_scoped_str  str;
-  textBuffer      text(0);
+  ats_scoped_fd fd;
+  ats_scoped_str str;
+  TextBuffer text(0);
 
   fd = procfd_open(target.pid, "comm");
   if (fd != -1) {
@@ -114,7 +132,7 @@ crashlog_write_procname(FILE * fp, const crashlog_target& target)
 }
 
 bool
-crashlog_write_datime(FILE * fp, const crashlog_target& target)
+crashlog_write_datime(FILE *fp, const crashlog_target &target)
 {
   char buf[128];
 
@@ -124,26 +142,9 @@ crashlog_write_datime(FILE * fp, const crashlog_target& target)
 }
 
 bool
-crashlog_write_procstatus(FILE * fp, const crashlog_target& target)
+crashlog_write_backtrace(FILE *fp, const crashlog_target &)
 {
-  ats_scoped_fd   fd;
-  textBuffer      text(0);
-
-  fd = procfd_open(target.pid, "status");
-  if (fd != -1) {
-    text.slurp(fd);
-    text.chomp();
-
-    fprintf(fp, "Process Status:\n%s\n", text.bufPtr());
-  }
-
-  return !text.empty();
-}
-
-bool
-crashlog_write_backtrace(FILE * fp, const crashlog_target&)
-{
-  TSString trace = NULL;
+  TSString trace = nullptr;
   TSMgmtError mgmterr;
 
   // NOTE: sometimes we can't get a backtrace because the ptrace attach will fail with
@@ -152,7 +153,7 @@ crashlog_write_backtrace(FILE * fp, const crashlog_target&)
   // kernel locking the process information?
 
   if ((mgmterr = TSProxyBacktraceGet(0, &trace)) != TS_ERR_OKAY) {
-    char * msg = TSGetErrorMessage(mgmterr);
+    char *msg = TSGetErrorMessage(mgmterr);
     fprintf(fp, "Unable to retrieve backtrace: %s\n", msg);
     TSfree(msg);
     return false;
@@ -164,14 +165,14 @@ crashlog_write_backtrace(FILE * fp, const crashlog_target&)
 }
 
 bool
-crashlog_write_records(FILE * fp, const crashlog_target&)
+crashlog_write_records(FILE *fp, const crashlog_target &)
 {
   TSMgmtError mgmterr;
-  TSList list = TSListCreate();
+  TSList list  = TSListCreate();
   bool success = false;
 
   if ((mgmterr = TSRecordGetMatchMlt(".", list)) != TS_ERR_OKAY) {
-    char * msg = TSGetErrorMessage(mgmterr);
+    char *msg = TSGetErrorMessage(mgmterr);
     fprintf(fp, "Unable to retrieve Traffic Server records: %s\n", msg);
     TSfree(msg);
     goto done;
@@ -179,9 +180,7 @@ crashlog_write_records(FILE * fp, const crashlog_target&)
 
   // If the RPC call failed, the list will be empty, so we won't print anything. Otherwise,
   // print all the results, freeing them as we go.
-  for (TSRecordEle * rec_ele = (TSRecordEle *) TSListDequeue(list); rec_ele;
-      rec_ele = (TSRecordEle *) TSListDequeue(list)) {
-
+  for (TSRecordEle *rec_ele = (TSRecordEle *)TSListDequeue(list); rec_ele; rec_ele = (TSRecordEle *)TSListDequeue(list)) {
     if (!success) {
       success = true;
       fprintf(fp, "Traffic Server Configuration Records:\n");
@@ -214,7 +213,7 @@ done:
 }
 
 bool
-crashlog_write_siginfo(FILE * fp, const crashlog_target& target)
+crashlog_write_siginfo(FILE *fp, const crashlog_target &target)
 {
   char tmp[32];
 
@@ -224,8 +223,7 @@ crashlog_write_siginfo(FILE * fp, const crashlog_target& target)
   }
 
   fprintf(fp, "Signal Status:\n");
-  fprintf(fp, LABELFMT "%d (%s)\n", "siginfo.si_signo:",
-      target.siginfo.si_signo, strsignal(target.siginfo.si_signo));
+  fprintf(fp, LABELFMT "%d (%s)\n", "siginfo.si_signo:", target.siginfo.si_signo, strsignal(target.siginfo.si_signo));
 
   snprintf(tmp, sizeof(tmp), "%ld", (long)target.siginfo.si_pid);
   fprintf(fp, LABELFMT LABELFMT, "siginfo.si_pid:", tmp);
@@ -238,30 +236,39 @@ crashlog_write_siginfo(FILE * fp, const crashlog_target& target)
   fprintf(fp, "\n");
 
   if (target.siginfo.si_code == SI_USER) {
-    fprintf(fp,  "Signal delivered by user %ld from process %ld\n",
-      (long)target.siginfo.si_uid, (long)target.siginfo.si_pid);
+    fprintf(fp, "Signal delivered by user %ld from process %ld\n", (long)target.siginfo.si_uid, (long)target.siginfo.si_pid);
     return true;
   }
 
   if (target.siginfo.si_signo == SIGSEGV) {
-    const char * msg = "Unknown error";
+    const char *msg = "Unknown error";
 
     switch (target.siginfo.si_code) {
-    case SEGV_MAPERR: msg = "No object mapped"; break;
-    case SEGV_ACCERR: msg = "Invalid permissions for mapped object"; break;
+    case SEGV_MAPERR:
+      msg = "No object mapped";
+      break;
+    case SEGV_ACCERR:
+      msg = "Invalid permissions for mapped object";
+      break;
     }
 
     fprintf(fp, "%s at address " ADDRFMT "\n", msg, ADDRCAST(target.siginfo.si_addr));
     return true;
   }
 
-  if (target.siginfo.si_signo == SIGSEGV) {
-    const char * msg = "Unknown error";
+  if (target.siginfo.si_signo == SIGBUS) {
+    const char *msg = "Unknown error";
 
     switch (target.siginfo.si_code) {
-    case BUS_ADRALN: msg = "Invalid address alignment"; break;
-    case BUS_ADRERR: msg = "Nonexistent physical address"; break;
-    case BUS_OBJERR: msg = "Object-specific hardware error"; break;
+    case BUS_ADRALN:
+      msg = "Invalid address alignment";
+      break;
+    case BUS_ADRERR:
+      msg = "Nonexistent physical address";
+      break;
+    case BUS_OBJERR:
+      msg = "Object-specific hardware error";
+      break;
     }
 
     fprintf(fp, "%s at address " ADDRFMT "\n", msg, ADDRCAST(target.siginfo.si_addr));
@@ -272,7 +279,7 @@ crashlog_write_siginfo(FILE * fp, const crashlog_target& target)
 }
 
 bool
-crashlog_write_registers(FILE * fp, const crashlog_target& target)
+crashlog_write_registers(FILE *fp, const crashlog_target &target)
 {
   if (!(CRASHLOG_HAVE_THREADINFO & target.flags)) {
     fprintf(fp, "No target CPU registers\n");
@@ -281,30 +288,28 @@ crashlog_write_registers(FILE * fp, const crashlog_target& target)
 
 #if defined(__linux__) && (defined(__x86_64__) || defined(__i386__))
 
-  // x86 register names as per ucontext.h.
+// x86 register names as per ucontext.h.
 #if defined(__i386__)
 #define REGFMT "0x%08" PRIx32
-#define ADDRCAST(x) ((uint32_t)(x))
-  static const char * names[NGREG] = {
-    "GS", "FS", "ES", "DS", "EDI", "ESI", "EBP", "ESP",
-    "EBX", "EDX", "ECX", "EAX", "TRAPNO", "ERR", "EIP", "CS",
-    "EFL", "UESP", "SS"
+#define REGCAST(x) ((uint32_t)(x))
+  static const char *names[NGREG] = {
+    "GS",  "FS",  "ES",     "DS",  "EDI", "ESI", "EBP", "ESP",  "EBX", "EDX",
+    "ECX", "EAX", "TRAPNO", "ERR", "EIP", "CS",  "EFL", "UESP", "SS",
   };
 #endif
 
 #if defined(__x86_64__)
 #define REGFMT "0x%016" PRIx64
 #define REGCAST(x) ((uint64_t)(x))
-  static const char * names[NGREG] = {
-    "R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
-    "RDI", "RSI", "RBP", "RBX", "RDX", "RAX", "RCX", "RSP",
-    "RIP", "EFL", "CSGSFS", "ERR", "TRAPNO", "OLDMASK", "CR2"
+  static const char *names[NGREG] = {
+    "R8",  "R9",  "R10", "R11", "R12", "R13", "R14",    "R15", "RDI",    "RSI",     "RBP", "RBX",
+    "RDX", "RAX", "RCX", "RSP", "RIP", "EFL", "CSGSFS", "ERR", "TRAPNO", "OLDMASK", "CR2",
   };
 #endif
 
   fprintf(fp, "CPU Registers:\n");
   for (unsigned i = 0; i < countof(names); ++i) {
-    const char * trailer = ((i % 4) == 3) ? "\n" : " ";
+    const char *trailer = ((i % 4) == 3) ? "\n" : " ";
     fprintf(fp, "%-3s:" REGFMT "%s", names[i], REGCAST(target.ucontext.uc_mcontext.gregs[i]), trailer);
   }
 

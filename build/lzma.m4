@@ -73,7 +73,6 @@ else
   fi
 fi
 
-lzmah=0
 if test "$enable_lzma" != "no"; then
   saved_ldflags=$LDFLAGS
   saved_cppflags=$CPPFLAGS
@@ -82,9 +81,9 @@ if test "$enable_lzma" != "no"; then
   if test "$lzma_base_dir" != "/usr"; then
     TS_ADDTO(CPPFLAGS, [-I${lzma_include}])
     TS_ADDTO(LDFLAGS, [-L${lzma_ldflags}])
-    TS_ADDTO(LIBTOOL_LINK_FLAGS, [-R${lzma_ldflags}])
+    TS_ADDTO_RPATH(${lzma_ldflags})
   fi
-  AC_SEARCH_LIBS([lzma_code], [lzma], [lzma_have_libs=1])
+  AC_CHECK_LIB([lzma], [lzma_code], [lzma_have_libs=1])
   if test "$lzma_have_libs" != "0"; then
     AC_CHECK_HEADERS(lzma.h, [lzma_have_headers=1])
   fi
@@ -96,5 +95,4 @@ if test "$enable_lzma" != "no"; then
     LDFLAGS=$saved_ldflags
   fi
 fi
-AC_SUBST(lzmah)
 ])

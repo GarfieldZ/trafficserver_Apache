@@ -16,17 +16,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-AM_CPPFLAGS = \
+AM_CPPFLAGS += \
   $(iocore_include_dirs) \
-  -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib \
-  -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
-  -I$(top_srcdir)/proxy \
-  -I$(top_srcdir)/proxy/http \
-  -I$(top_srcdir)/proxy/hdrs \
-  -I$(top_srcdir)/mgmt \
-  -I$(top_srcdir)/mgmt/utils 
+  -I$(abs_top_srcdir)/lib \
+  -I$(abs_top_srcdir)/lib/records \
+  -I$(abs_top_srcdir)/proxy \
+  -I$(abs_top_srcdir)/proxy/http \
+  -I$(abs_top_srcdir)/proxy/hdrs \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/utils
 
 noinst_LIBRARIES = libinkdns.a
 
@@ -49,3 +47,8 @@ libinkdns_a_SOURCES = \
 #test_UNUSED_SOURCES = \
 #  test_I_DNS.cc \
 #  test_P_DNS.cc
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

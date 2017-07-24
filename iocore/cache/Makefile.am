@@ -16,24 +16,21 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-AM_CPPFLAGS = \
+AM_CPPFLAGS += \
   $(iocore_include_dirs) \
-  -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib \
-  -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
-  -I$(top_srcdir)/proxy/api/ts \
-  -I$(top_srcdir)/proxy \
-  -I$(top_srcdir)/proxy/hdrs \
-  -I$(top_srcdir)/proxy/http \
-  -I$(top_srcdir)/proxy/shared \
-  -I$(top_srcdir)/proxy/http/remap \
-  -I$(top_srcdir)/mgmt \
-  -I$(top_srcdir)/mgmt/utils
+  -I$(abs_top_srcdir)/lib \
+  -I$(abs_top_srcdir)/lib/records \
+  -I$(abs_top_srcdir)/proxy \
+  -I$(abs_top_srcdir)/proxy/hdrs \
+  -I$(abs_top_srcdir)/proxy/http \
+  -I$(abs_top_srcdir)/proxy/shared \
+  -I$(abs_top_srcdir)/proxy/http/remap \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/utils
 
 ADD_SRC =
 if BUILD_TESTS
-  ADD_SRC += CacheTest.cc P_CacheTest.h 
+  ADD_SRC += CacheTest.cc P_CacheTest.h
 endif
 
 noinst_LIBRARIES = libinkcache.a
@@ -67,3 +64,8 @@ libinkcache_a_SOURCES = \
   RamCacheLRU.cc \
   Store.cc \
   $(ADD_SRC)
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

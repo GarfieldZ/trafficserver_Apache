@@ -21,29 +21,28 @@
   limitations under the License.
  */
 
-#include "ink_config.h"
+#include "ts/ink_config.h"
 #include "I_RecMutex.h"
 
-int
-rec_mutex_init(RecMutex * m, const char *name)
+void
+rec_mutex_init(RecMutex *m, const char *)
 {
   m->nthread_holding = 0;
-  m->thread_holding = 0;
-  return ink_mutex_init(&(m->the_mutex), name);
+  m->thread_holding  = ink_thread_null();
+  ink_mutex_init(&(m->the_mutex));
 }
 
-int
-rec_mutex_destroy(RecMutex * m)
+void
+rec_mutex_destroy(RecMutex *m)
 {
   ink_assert(m->nthread_holding == 0);
-  ink_assert(m->thread_holding == 0);
-  return ink_mutex_destroy(&(m->the_mutex));
+  ink_assert(m->thread_holding == ink_thread_null());
+  ink_mutex_destroy(&(m->the_mutex));
 }
 
-int
-rec_mutex_acquire(RecMutex * m)
+void
+rec_mutex_acquire(RecMutex *m)
 {
-
   ink_thread this_thread = ink_thread_self();
 
   if (m->thread_holding != this_thread) {
@@ -52,19 +51,16 @@ rec_mutex_acquire(RecMutex * m)
   }
 
   m->nthread_holding++;
-  return 0;
 }
 
-int
-rec_mutex_release(RecMutex * m)
+void
+rec_mutex_release(RecMutex *m)
 {
-
   if (m->nthread_holding != 0) {
     m->nthread_holding--;
     if (m->nthread_holding == 0) {
-      m->thread_holding = 0;
+      m->thread_holding = ink_thread_null();
       ink_mutex_release(&(m->the_mutex));
     }
   }
-  return 0;
 }

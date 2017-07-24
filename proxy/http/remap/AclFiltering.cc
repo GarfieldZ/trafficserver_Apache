@@ -23,7 +23,6 @@
 
 #include "AclFiltering.h"
 #include "Main.h"
-#include "Error.h"
 #include "HTTP.h"
 
 // ===============================================================================
@@ -31,7 +30,7 @@
 // ===============================================================================
 
 void
-acl_filter_rule::reset(void)
+acl_filter_rule::reset()
 {
   int i;
   for (i = (argc = 0); i < ACL_FILTER_MAX_ARGV; i++) {
@@ -46,10 +45,15 @@ acl_filter_rule::reset(void)
     src_ip_array[i].reset();
   }
   src_ip_valid = 0;
+  for (i = (in_ip_cnt = 0); i < ACL_FILTER_MAX_IN_IP; i++) {
+    in_ip_array[i].reset();
+  }
+  in_ip_valid = 0;
+  internal    = 0;
 }
 
-acl_filter_rule::acl_filter_rule():next(NULL), filter_name_size(0), filter_name(NULL), allow_flag(1),
-src_ip_valid(0), active_queue_flag(0), argc(0)
+acl_filter_rule::acl_filter_rule()
+  : next(nullptr), filter_name(nullptr), allow_flag(1), src_ip_valid(0), active_queue_flag(0), internal(0), argc(0)
 {
   standard_method_lookup.resize(HTTP_WKSIDX_METHODS_CNT);
   ink_zero(argv);
@@ -68,7 +72,7 @@ acl_filter_rule::add_argv(int _argc, char *_argv[])
   int real_cnt = 0;
   if (likely(_argv)) {
     for (int i = 0; i < _argc && argc < ACL_FILTER_MAX_ARGV; i++) {
-      if (likely(_argv[i] && (argv[argc] = ats_strdup(_argv[i])) != NULL)) {
+      if (likely(_argv[i] && (argv[argc] = ats_strdup(_argv[i])) != nullptr)) {
         real_cnt++;
         argc++;
       }
@@ -77,25 +81,23 @@ acl_filter_rule::add_argv(int _argc, char *_argv[])
   return real_cnt;
 }
 
-int
+void
 acl_filter_rule::name(const char *_name)
 {
-  filter_name_size = 0;
   filter_name = (char *)ats_free_null(filter_name);
-  if (_name && _name[0] && (filter_name = ats_strdup(_name)) != NULL) {
-    filter_name_size = strlen(filter_name);
+  if (_name) {
+    filter_name = ats_strdup(_name);
   }
-  return filter_name_size;
 }
 
 void
-acl_filter_rule::print(void)
+acl_filter_rule::print()
 {
   int i;
   printf("-----------------------------------------------------------------------------------------\n");
-  printf("Filter \"%s\" status: allow_flag=%d, src_ip_valid=%d, active_queue_flag=%d\n",
-         filter_name ? filter_name : "<NONAME>", (int) allow_flag,
-         (int) src_ip_valid, (int) active_queue_flag);
+  printf("Filter \"%s\" status: allow_flag=%s, src_ip_valid=%s, in_ip_valid=%s, internal=%s, active_queue_flag=%d\n",
+         filter_name ? filter_name : "<NONAME>", allow_flag ? "true" : "false", src_ip_valid ? "true" : "false",
+         in_ip_valid ? "true" : "false", internal ? "true" : "false", (int)active_queue_flag);
   printf("standard methods=");
   for (i = 0; i < HTTP_WKSIDX_METHODS_CNT; i++) {
     if (standard_method_lookup[i]) {
@@ -103,18 +105,22 @@ acl_filter_rule::print(void)
     }
   }
   printf("nonstandard methods=");
-  for (MethodMap::iterator iter = nonstandard_methods.begin(), end = nonstandard_methods.end(); iter != end; ++iter) {
-    printf("%s ", iter->c_str());
+  for (const auto &nonstandard_method : nonstandard_methods) {
+    printf("%s ", nonstandard_method.c_str());
   }
   printf("\n");
   printf("src_ip_cnt=%d\n", src_ip_cnt);
   for (i = 0; i < src_ip_cnt; i++) {
     ip_text_buffer b1, b2;
-    printf("%s - %s"
-      , ats_ip_ntop(&src_ip_array[i].start.sa, b1, sizeof(b1))
-      , ats_ip_ntop(&src_ip_array[i].end.sa, b2, sizeof(b2))
-    );
+    printf("%s - %s", ats_ip_ntop(&src_ip_array[i].start.sa, b1, sizeof(b1)), ats_ip_ntop(&src_ip_array[i].end.sa, b2, sizeof(b2)));
   }
+  printf("\n");
+  printf("in_ip_cnt=%d\n", in_ip_cnt);
+  for (i = 0; i < in_ip_cnt; i++) {
+    ip_text_buffer b1, b2;
+    printf("%s - %s", ats_ip_ntop(&in_ip_array[i].start.sa, b1, sizeof(b1)), ats_ip_ntop(&in_ip_array[i].end.sa, b2, sizeof(b2)));
+  }
+  printf("\n");
   for (i = 0; i < argc; i++) {
     printf("argv[%d] = \"%s\"\n", i, argv[i]);
   }
@@ -123,12 +129,13 @@ acl_filter_rule::print(void)
 acl_filter_rule *
 acl_filter_rule::find_byname(acl_filter_rule *list, const char *_name)
 {
-  int _name_size = 0;
-  acl_filter_rule *rp = 0;
+  int _name_size      = 0;
+  acl_filter_rule *rp = nullptr;
   if (likely(list && _name && (_name_size = strlen(_name)) > 0)) {
     for (rp = list; rp; rp = rp->next) {
-      if (rp->filter_name_size == _name_size && !strcasecmp(rp->filter_name, _name))
+      if (strcasecmp(rp->filter_name, _name) == 0) {
         break;
+      }
     }
   }
   return rp;
@@ -140,8 +147,8 @@ acl_filter_rule::delete_byname(acl_filter_rule **rpp, const char *_name)
   int _name_size = 0;
   acl_filter_rule *rp;
   if (likely(rpp && _name && (_name_size = strlen(_name)) > 0)) {
-    for (; (rp = *rpp) != NULL; rpp = &rp->next) {
-      if (rp->filter_name_size == _name_size && !strcasecmp(rp->filter_name, _name)) {
+    for (; (rp = *rpp) != nullptr; rpp = &rp->next) {
+      if (strcasecmp(rp->filter_name, _name) == 0) {
         *rpp = rp->next;
         delete rp;
         break;
@@ -156,17 +163,18 @@ acl_filter_rule::requeue_in_active_list(acl_filter_rule **list, acl_filter_rule 
   if (likely(list && rp)) {
     if (rp->active_queue_flag == 0) {
       acl_filter_rule *r, **rpp;
-      for (rpp = list; ((r = *rpp) != NULL); rpp = &(r->next)) {
+      for (rpp = list; ((r = *rpp) != nullptr); rpp = &(r->next)) {
         if (r == rp) {
           *rpp = r->next;
           break;
         }
       }
-      for (rpp = list; ((r = *rpp) != NULL); rpp = &(r->next)) {
-        if (r->active_queue_flag == 0)
+      for (rpp = list; ((r = *rpp) != nullptr); rpp = &(r->next)) {
+        if (r->active_queue_flag == 0) {
           break;
+        }
       }
-      (*rpp = rp)->next = r;
+      (*rpp = rp)->next     = r;
       rp->active_queue_flag = 1;
     }
   }
@@ -184,8 +192,10 @@ acl_filter_rule::requeue_in_passive_list(acl_filter_rule **list, acl_filter_rule
           break;
         }
       }
-      for (rpp = list; *rpp; rpp = &((*rpp)->next));
-      (*rpp = rp)->next = NULL;
+      for (rpp = list; *rpp; rpp = &((*rpp)->next)) {
+        ;
+      }
+      (*rpp = rp)->next     = nullptr;
       rp->active_queue_flag = 0;
     }
   }

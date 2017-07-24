@@ -28,10 +28,11 @@
 #include "statement.h"
 #include "parser.h"
 #include "expander.h"
+#include "conditions.h"
 
 // Main expander method
 std::string
-VariableExpander::expand(const Resources& res)
+VariableExpander::expand(const Resources &res)
 {
   std::string result;
 
@@ -40,15 +41,17 @@ VariableExpander::expand(const Resources& res)
 
   while (true) {
     std::string::size_type start = result.find("%<");
-    if (start == std::string::npos)
+    if (start == std::string::npos) {
       break;
+    }
 
-    std::string::size_type end = result.find(">", start);
-    if (end == std::string::npos)
+    std::string::size_type end = result.find('>', start);
+    if (end == std::string::npos) {
       break;
+    }
 
     std::string first_part = result.substr(0, start);
-    std::string last_part = result.substr(end + 1);
+    std::string last_part  = result.substr(end + 1);
 
     // Now evaluate the variable
     std::string variable = result.substr(start, end - start + 1);
@@ -65,7 +68,13 @@ VariableExpander::expand(const Resources& res)
       // Protocol of the incoming request
       if (TSHttpTxnPristineUrlGet(res.txnp, &bufp, &url_loc) == TS_SUCCESS) {
         int len;
-        resolved_variable = TSUrlSchemeGet(bufp, url_loc, &len);
+        const char *tmp = TSUrlSchemeGet(bufp, url_loc, &len);
+        if ((tmp != nullptr) && (len > 0)) {
+          resolved_variable.assign(tmp, len);
+        } else {
+          resolved_variable.assign("");
+        }
+        TSHandleMLocRelease(bufp, TS_NULL_MLOC, url_loc);
       }
     } else if (variable == "%<port>") {
       // Original port of the incoming request
@@ -105,6 +114,35 @@ VariableExpander::expand(const Resources& res)
         }
         TSHandleMLocRelease(bufp, TS_NULL_MLOC, url_loc);
       }
+    } else if (variable == "%<cque>") {
+      // The client request effective URL.
+      int url_len = 0;
+      char *url   = TSHttpTxnEffectiveUrlStringGet(res.txnp, &url_len);
+      if (url && url_len) {
+        resolved_variable.assign(url, url_len);
+      }
+      free(url);
+      url = nullptr;
+    } else if (variable == "%<INBOUND:REMOTE-ADDR>") {
+      ConditionInbound::append_value(resolved_variable, res, NET_QUAL_REMOTE_ADDR);
+    } else if (variable == "%<INBOUND:REMOTE-PORT>") {
+      ConditionInbound::append_value(resolved_variable, res, NET_QUAL_REMOTE_PORT);
+    } else if (variable == "%<INBOUND:LOCAL-ADDR>") {
+      ConditionInbound::append_value(resolved_variable, res, NET_QUAL_LOCAL_ADDR);
+    } else if (variable == "%<INBOUND:LOCAL-PORT>") {
+      ConditionInbound::append_value(resolved_variable, res, NET_QUAL_LOCAL_PORT);
+    } else if (variable == "%<INBOUND:TLS>") {
+      ConditionInbound::append_value(resolved_variable, res, NET_QUAL_TLS);
+    } else if (variable == "%<INBOUND:H2>") {
+      ConditionInbound::append_value(resolved_variable, res, NET_QUAL_H2);
+    } else if (variable == "%<INBOUND:IPV4>") {
+      ConditionInbound::append_value(resolved_variable, res, NET_QUAL_IPV4);
+    } else if (variable == "%<INBOUND:IPV6>") {
+      ConditionInbound::append_value(resolved_variable, res, NET_QUAL_IPV6);
+    } else if (variable == "%<INBOUND:IP-FAMILY>") {
+      ConditionInbound::append_value(resolved_variable, res, NET_QUAL_IP_FAMILY);
+    } else if (variable == "%<INBOUND:STACK>") {
+      ConditionInbound::append_value(resolved_variable, res, NET_QUAL_STACK);
     }
 
     // TODO(SaveTheRbtz): Can be optimized

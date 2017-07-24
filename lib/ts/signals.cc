@@ -26,24 +26,27 @@
 
 **************************************************************************/
 
-#include "libts.h"
-#include "signals.h"
-#include "ink_stack_trace.h"
+#include "ts/ink_platform.h"
+#include "ts/signals.h"
+#include "ts/ink_stack_trace.h"
+#include "ts/ink_assert.h"
+#include "ts/ink_thread.h"
+#include "ts/Diags.h"
 
 bool
 signal_check_handler(int signal, signal_handler_t handler)
 {
   struct sigaction oact;
-  void * sigact;
+  void *sigact;
 
-  ink_release_assert(sigaction(signal, NULL, &oact) == 0);
+  ink_release_assert(sigaction(signal, nullptr, &oact) == 0);
   if (handler == (signal_handler_t)SIG_DFL || handler == (signal_handler_t)SIG_IGN) {
     sigact = (void *)oact.sa_handler;
   } else {
     sigact = (void *)oact.sa_sigaction;
   }
 
-  if (sigact != handler) {
+  if (sigact != (void *)handler) {
     Warning("handler for signal %d was %p, not %p as expected", signal, sigact, handler);
     return false;
   }
@@ -60,12 +63,13 @@ signal_check_handler(int signal, signal_handler_t handler)
 void
 check_signals(signal_handler_t handler)
 {
-  signal_check_handler(SIGPIPE, (signal_handler_t) SIG_IGN);
+  signal_check_handler(SIGPIPE, (signal_handler_t)SIG_IGN);
   signal_check_handler(SIGQUIT, handler);
   signal_check_handler(SIGHUP, handler);
   signal_check_handler(SIGTERM, handler);
   signal_check_handler(SIGINT, handler);
   signal_check_handler(SIGUSR1, handler);
+  signal_check_handler(SIGUSR2, handler);
 }
 
 static void
@@ -73,12 +77,12 @@ set_signal(int signo, signal_handler_t handler)
 {
   struct sigaction act;
 
-  act.sa_handler = NULL;
+  act.sa_handler   = nullptr;
   act.sa_sigaction = handler;
-  act.sa_flags = SA_SIGINFO;
+  act.sa_flags     = SA_SIGINFO;
   sigemptyset(&(act.sa_mask));
 
-  ink_release_assert(sigaction(signo, &act, NULL) == 0);
+  ink_release_assert(sigaction(signo, &act, nullptr) == 0);
 }
 
 // Reset a signal handler to the default handler.
@@ -88,10 +92,10 @@ signal_reset_default(int signo)
   struct sigaction act;
 
   act.sa_handler = SIG_DFL;
-  act.sa_flags = SA_NODEFER | SA_ONSTACK | SA_RESETHAND;
+  act.sa_flags   = SA_NODEFER | SA_ONSTACK | SA_RESETHAND;
   sigemptyset(&(act.sa_mask));
 
-  ink_release_assert(sigaction(signo, &act, NULL) == 0);
+  ink_release_assert(sigaction(signo, &act, nullptr) == 0);
 }
 
 //
@@ -99,20 +103,20 @@ signal_reset_default(int signo)
 // certain the DEC pthreads SIGPIPE bug isn't back..
 //
 static void *
-check_signal_thread(void * ptr)
+check_signal_thread(void *ptr)
 {
   signal_handler_t handler = (signal_handler_t)ptr;
   for (;;) {
     check_signals(handler);
     sleep(2);
   }
-  return NULL;
+  return nullptr;
 }
 
 void
 signal_start_check_thread(signal_handler_t handler)
 {
-  ink_thread_create(check_signal_thread, (void *)handler);
+  ink_thread_create(check_signal_thread, (void *)handler, 0, 0, nullptr);
 }
 
 bool
@@ -121,7 +125,7 @@ signal_is_masked(int signo)
   sigset_t current;
 
   sigemptyset(&current);
-  if (ink_thread_sigsetmask(SIG_SETMASK, NULL /* oldset */, &current) == 0) {
+  if (ink_thread_sigsetmask(SIG_SETMASK, nullptr /* oldset */, &current) == 0) {
     return sigismember(&current, signo) == 1;
   }
 
@@ -153,18 +157,12 @@ signal_is_crash(int signo)
 }
 
 void
-signal_format_siginfo(int signo, siginfo_t * info, const char * msg)
+signal_format_siginfo(int signo, siginfo_t *info, const char *msg)
 {
   (void)info;
   (void)signo;
 
-#if HAVE_PSIGINFO
-  psiginfo(info, msg);
-#elif HAVE_PSIGNAL
-  psignal(signo, msg);
-#else
   char buf[64];
-  size_t len;
 
 #if HAVE_STRSIGNAL
   snprintf(buf, sizeof(buf), "%s: received signal %d (%s)\n", msg, signo, strsignal(signo));
@@ -172,8 +170,8 @@ signal_format_siginfo(int signo, siginfo_t * info, const char * msg)
   snprintf(buf, sizeof(buf), "%s: received signal %d\n", msg, signo);
 #endif
 
-  write(STDERR_FILENO, buf, strlen(buf));
-#endif
+  ssize_t ignored = write(STDERR_FILENO, buf, strlen(buf));
+  (void)ignored; // because gcc and glibc are stupid, "(void)write(...)" doesn't suffice.
 }
 
 void
@@ -202,7 +200,7 @@ signal_register_default_handler(signal_handler_t handler)
   sigset_t sigsToBlock;
 
   sigemptyset(&sigsToBlock);
-  ink_thread_sigsetmask(SIG_SETMASK, &sigsToBlock, NULL);
+  ink_thread_sigsetmask(SIG_SETMASK, &sigsToBlock, nullptr);
 
   // SIGPIPE is just annoying to handle,we never care about it
   signal(SIGPIPE, SIG_IGN);
@@ -213,8 +211,7 @@ signal_register_default_handler(signal_handler_t handler)
 
   set_signal(SIGQUIT, handler);
   set_signal(SIGTERM, handler);
-  set_signal(SIGINT,  handler);
+  set_signal(SIGINT, handler);
   set_signal(SIGUSR1, handler);
   set_signal(SIGUSR2, handler);
-
 }

@@ -21,94 +21,54 @@
   limitations under the License.
  */
 
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_defs.h"
+#include "ts/ink_inet.h"
+#include "ts/ParseRules.h"
+#include "ts/ink_code.h"
+#include "ts/ink_assert.h"
 #include "ts/TestBox.h"
-
-#if defined(darwin)
-extern "C"
-{
-  struct hostent *gethostbyname_r(const char *name, struct hostent *result, char *buffer, int buflen, int *h_errnop);
-  struct hostent *gethostbyaddr_r(const char *name, size_t size, int type,
-                                  struct hostent *result, char *buffer, int buflen, int *h_errnop);
-}
-#endif
+#include "ts/TextBuffer.h"
 
 IpAddr const IpAddr::INVALID;
 
-struct hostent *
-ink_gethostbyname_r(char *hostname, ink_gethostbyname_r_data * data)
-{
-#ifdef RENTRENT_GETHOSTBYNAME
-  struct hostent *r = gethostbyname(hostname);
-  if (r)
-    data->ent = *r;
-  data->herrno = errno;
-
-#else //RENTRENT_GETHOSTBYNAME
-#if GETHOSTBYNAME_R_GLIBC2
-
-  struct hostent *addrp = NULL;
-  int res = gethostbyname_r(hostname, &data->ent, data->buf,
-                            INK_GETHOSTBYNAME_R_DATA_SIZE, &addrp,
-                            &data->herrno);
-  struct hostent *r = NULL;
-  if (!res && addrp)
-    r = addrp;
-
-#else
-  struct hostent *r = gethostbyname_r(hostname, &data->ent, data->buf,
-                                      INK_GETHOSTBYNAME_R_DATA_SIZE,
-                                      &data->herrno);
-#endif
-#endif
-  return r;
-}
-
-struct hostent *
-ink_gethostbyaddr_r(char *ip, int len, int type, ink_gethostbyaddr_r_data * data)
-{
-#if GETHOSTBYNAME_R_GLIBC2
-  struct hostent *r = NULL;
-  struct hostent *addrp = NULL;
-  int res = gethostbyaddr_r((char *) ip, len, type, &data->ent, data->buf,
-                            INK_GETHOSTBYNAME_R_DATA_SIZE, &addrp,
-                            &data->herrno);
-  if (!res && addrp)
-    r = addrp;
-#else
-#ifdef RENTRENT_GETHOSTBYADDR
-  struct hostent *r = gethostbyaddr((const void *) ip, len, type);
-
-#else
-  struct hostent *r = gethostbyaddr_r((char *) ip, len, type, &data->ent,
-                                      data->buf,
-                                      INK_GETHOSTBYNAME_R_DATA_SIZE,
-                                      &data->herrno);
-#endif
-#endif //LINUX
-  return r;
-}
+const ts::StringView IP_PROTO_TAG_IPV4("ipv4", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_IPV6("ipv6", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_UDP("udp", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_TCP("tcp", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_TLS_1_0("tls/1.0", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_TLS_1_1("tls/1.1", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_TLS_1_2("tls/1.2", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_TLS_1_3("tls/1.3", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_HTTP_0_9("http/0.9", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_HTTP_1_0("http/1.0", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_HTTP_1_1("http/1.1", ts::StringView::literal);
+const ts::StringView IP_PROTO_TAG_HTTP_2_0("h2", ts::StringView::literal); // HTTP/2 over TLS
 
 uint32_t
 ink_inet_addr(const char *s)
 {
   uint32_t u[4];
-  uint8_t *pc = (uint8_t *) s;
-  int n = 0;
+  uint8_t *pc   = (uint8_t *)s;
+  int n         = 0;
   uint32_t base = 10;
 
-  while (n < 4) {
+  if (nullptr == s) {
+    return htonl((uint32_t)-1);
+  }
 
+  while (n < 4) {
     u[n] = 0;
     base = 10;
 
     // handle hex, octal
 
     if (*pc == '0') {
-      if (*++pc == 'x' || *pc == 'X')
+      if (*++pc == 'x' || *pc == 'X') {
         base = 16, pc++;
-      else
+      } else {
         base = 8;
+      }
     }
     // handle hex, octal, decimal
 
@@ -125,37 +85,43 @@ ink_inet_addr(const char *s)
     }
 
     n++;
-    if (*pc == '.')
+    if (*pc == '.') {
       pc++;
-    else
+    } else {
       break;
+    }
   }
 
-  if (*pc && !ParseRules::is_wslfcr(*pc))
-    return htonl((uint32_t) - 1);
+  if (*pc && !ParseRules::is_wslfcr(*pc)) {
+    return htonl((uint32_t)-1);
+  }
 
   switch (n) {
   case 1:
     return htonl(u[0]);
   case 2:
-    if (u[0] > 0xff || u[1] > 0xffffff)
-      return htonl((uint32_t) - 1);
+    if (u[0] > 0xff || u[1] > 0xffffff) {
+      return htonl((uint32_t)-1);
+    }
     return htonl((u[0] << 24) | u[1]);
   case 3:
-    if (u[0] > 0xff || u[1] > 0xff || u[2] > 0xffff)
-      return htonl((uint32_t) - 1);
+    if (u[0] > 0xff || u[1] > 0xff || u[2] > 0xffff) {
+      return htonl((uint32_t)-1);
+    }
     return htonl((u[0] << 24) | (u[1] << 16) | u[2]);
   case 4:
-    if (u[0] > 0xff || u[1] > 0xff || u[2] > 0xff || u[3] > 0xff)
-      return htonl((uint32_t) - 1);
+    if (u[0] > 0xff || u[1] > 0xff || u[2] > 0xff || u[3] > 0xff) {
+      return htonl((uint32_t)-1);
+    }
     return htonl((u[0] << 24) | (u[1] << 16) | (u[2] << 8) | u[3]);
   }
-  return htonl((uint32_t) - 1);
+  return htonl((uint32_t)-1);
 }
 
-const char *ats_ip_ntop(const struct sockaddr *addr, char *dst, size_t size)
+const char *
+ats_ip_ntop(const struct sockaddr *addr, char *dst, size_t size)
 {
-  char const* zret = 0;
+  const char *zret = nullptr;
 
   switch (addr->sa_family) {
   case AF_INET:
@@ -172,38 +138,44 @@ const char *ats_ip_ntop(const struct sockaddr *addr, char *dst, size_t size)
   return zret;
 }
 
-char const*
-ats_ip_family_name(int family) {
-  return AF_INET == family ? "IPv4"
-    : AF_INET6 == family ? "IPv6"
-    : "Unspec"
-    ;
+ts::StringView
+ats_ip_family_name(int family)
+{
+  static const ts::StringView UNSPEC("Unspec", ts::StringView::literal);
+  return AF_INET == family ? IP_PROTO_TAG_IPV4 : AF_INET6 == family ? IP_PROTO_TAG_IPV6 : UNSPEC;
 }
 
-char const* ats_ip_nptop(
-  sockaddr const* addr,
-  char* dst, size_t size
-) {
+const char *
+ats_ip_nptop(sockaddr const *addr, char *dst, size_t size)
+{
   char buff[INET6_ADDRPORTSTRLEN];
-  snprintf(dst, size, "%s:%u",
-    ats_ip_ntop(addr, buff, sizeof(buff)),
-    ats_ip_port_host_order(addr)
-  );
+  snprintf(dst, size, "%s:%u", ats_ip_ntop(addr, buff, sizeof(buff)), ats_ip_port_host_order(addr));
   return dst;
 }
 
 int
-ats_ip_parse(ts::ConstBuffer src, ts::ConstBuffer* addr, ts::ConstBuffer* port) {
+ats_ip_parse(ts::ConstBuffer src, ts::ConstBuffer *addr, ts::ConstBuffer *port, ts::ConstBuffer *rest)
+{
   // In case the incoming arguments are null.
   ts::ConstBuffer localAddr, localPort;
-  if (!addr) addr = &localAddr;
-  if (!port) port = &localPort;
+  if (!addr) {
+    addr = &localAddr;
+  }
+  if (!port) {
+    port = &localPort;
+  }
   addr->reset();
   port->reset();
+  if (rest) {
+    rest->reset();
+  }
 
   // Let's see if we can find out what's in the address string.
   if (src) {
-    while (src && isspace(*src)) ++src;
+    bool colon_p = false;
+    while (src && ParseRules::is_ws(*src)) {
+      ++src;
+    }
     // Check for brackets.
     if ('[' == *src) {
       /* Ugly. In a number of places we must use bracket notation
@@ -222,31 +194,41 @@ ats_ip_parse(ts::ConstBuffer src, ts::ConstBuffer* addr, ts::ConstBuffer* port) 
       */
       ++src; // skip bracket.
       *addr = src.splitOn(']');
-      if (*addr && ':' == *src) { // found the closing bracket and port colon
-        ++src; // skip colon.
-        *port = src;
-      } // else it's a fail for unclosed brackets.
+      if (':' == *src) {
+        colon_p = true;
+        ++src;
+      }
     } else {
-      // See if there's exactly 1 colon
-      ts::ConstBuffer tmp = src.after(':');
-      if (tmp && ! tmp.find(':')) { // 1 colon and no others
-        src.clip(tmp.data() - 1); // drop port from address.
-        *port = tmp;
-      } // else 0 or > 1 colon and no brackets means no port.
-      *addr = src;
+      ts::ConstBuffer post = src.after(':');
+      if (post.data() && !post.find(':')) {
+        *addr   = src.splitOn(post.data() - 1);
+        colon_p = true;
+      } else { // presume no port, use everything.
+        *addr = src;
+        src.reset();
+      }
     }
-    // clip port down to digits.
-    if (*port) {
-      char const* spot = port->data();
-      while (isdigit(*spot)) ++spot;
-      port->clip(spot);
+    if (colon_p) {
+      ts::ConstBuffer tmp(src);
+      while (src && ParseRules::is_digit(*src)) {
+        ++src;
+      }
+
+      if (tmp.data() == src.data()) {            // no digits at all
+        src.set(tmp.data() - 1, tmp.size() + 1); // back up to include colon
+      } else {
+        *port = tmp.clip(src.data());
+      }
+    }
+    if (rest) {
+      *rest = src;
     }
   }
   return *addr ? 0 : -1; // true if we found an address.
 }
 
 int
-ats_ip_pton(const ts::ConstBuffer& src, sockaddr* ip)
+ats_ip_pton(const ts::ConstBuffer &src, sockaddr *ip)
 {
   int zret = -1;
   ts::ConstBuffer addr, port;
@@ -254,8 +236,8 @@ ats_ip_pton(const ts::ConstBuffer& src, sockaddr* ip)
   ats_ip_invalidate(ip);
   if (0 == ats_ip_parse(src, &addr, &port)) {
     // Copy if not terminated.
-    if (0 != addr[addr.size()-1]) {
-      char* tmp = static_cast<char*>(alloca(addr.size()+1));
+    if (0 != addr[addr.size() - 1]) {
+      char *tmp = static_cast<char *>(alloca(addr.size() + 1));
       memcpy(tmp, addr.data(), addr.size());
       tmp[addr.size()] = 0;
       addr.set(tmp, addr.size());
@@ -274,15 +256,17 @@ ats_ip_pton(const ts::ConstBuffer& src, sockaddr* ip)
       }
     }
     // If we had a successful conversion, set the port.
-    if (ats_is_ip(ip))
+    if (ats_is_ip(ip)) {
       ats_ip_port_cast(ip) = port ? htons(atoi(port.data())) : 0;
+    }
   }
 
   return zret;
 }
 
 uint32_t
-ats_ip_hash(sockaddr const* addr) {
+ats_ip_hash(sockaddr const *addr)
+{
   union md5sum {
     unsigned char c[16];
     uint32_t i;
@@ -292,54 +276,75 @@ ats_ip_hash(sockaddr const* addr) {
   if (ats_is_ip4(addr)) {
     zret.i = ats_ip4_addr_cast(addr);
   } else if (ats_is_ip6(addr)) {
-    ink_code_md5(const_cast<uint8_t*>(ats_ip_addr8_cast(addr)), TS_IP6_SIZE, zret.c);
+    ink_code_md5(const_cast<uint8_t *>(ats_ip_addr8_cast(addr)), TS_IP6_SIZE, zret.c);
+  }
+  return zret.i;
+}
+
+uint64_t
+ats_ip_port_hash(sockaddr const *addr)
+{
+  union md5sum {
+    uint64_t i;
+    uint16_t b[4];
+    unsigned char c[16];
+  } zret;
+
+  zret.i = 0;
+  if (ats_is_ip4(addr)) {
+    zret.i = (static_cast<uint64_t>(ats_ip4_addr_cast(addr)) << 16) | (ats_ip_port_cast(addr));
+  } else if (ats_is_ip6(addr)) {
+    ink_code_md5(const_cast<uint8_t *>(ats_ip_addr8_cast(addr)), TS_IP6_SIZE, zret.c);
+    // now replace the bottom 16bits so we can account for the port.
+    zret.b[3] = ats_ip_port_cast(addr);
   }
   return zret.i;
 }
 
 int
-ats_ip_to_hex(sockaddr const* src, char* dst, size_t len) {
+ats_ip_to_hex(sockaddr const *src, char *dst, size_t len)
+{
   int zret = 0;
   ink_assert(len);
-  char const* dst_limit = dst + len - 1; // reserve null space.
+  const char *dst_limit = dst + len - 1; // reserve null space.
   if (ats_is_ip(src)) {
-    uint8_t const* data = ats_ip_addr8_cast(src);
-    for ( uint8_t const* src_limit = data + ats_ip_addr_size(src)
-        ; data < src_limit && dst+1 < dst_limit
-        ; ++data, zret += 2
-    ) {
-    uint8_t n1 = (*data >> 4) & 0xF; // high nybble.
-    uint8_t n0 = *data & 0xF; // low nybble.
+    uint8_t const *data = ats_ip_addr8_cast(src);
+    for (uint8_t const *src_limit = data + ats_ip_addr_size(src); data < src_limit && dst + 1 < dst_limit; ++data, zret += 2) {
+      uint8_t n1 = (*data >> 4) & 0xF; // high nybble.
+      uint8_t n0 = *data & 0xF;        // low nybble.
 
-    *dst++ = n1 > 9 ? n1 + 'A' - 10 : n1 + '0';
-    *dst++ = n0 > 9 ? n0 + 'A' - 10 : n0 + '0';
+      *dst++ = n1 > 9 ? n1 + 'A' - 10 : n1 + '0';
+      *dst++ = n0 > 9 ? n0 + 'A' - 10 : n0 + '0';
     }
   }
   *dst = 0; // terminate but don't include that in the length.
   return zret;
 }
 
-sockaddr* ats_ip_set(
-  sockaddr* dst,
-  IpAddr const& addr,
-  uint16_t port
-) {
-  if (AF_INET == addr._family) ats_ip4_set(dst, addr._addr._ip4, port);
-  else if (AF_INET6 == addr._family) ats_ip6_set(dst, addr._addr._ip6, port);
-  else ats_ip_invalidate(dst);
+sockaddr *
+ats_ip_set(sockaddr *dst, IpAddr const &addr, uint16_t port)
+{
+  if (AF_INET == addr._family) {
+    ats_ip4_set(dst, addr._addr._ip4, port);
+  } else if (AF_INET6 == addr._family) {
+    ats_ip6_set(dst, addr._addr._ip6, port);
+  } else {
+    ats_ip_invalidate(dst);
+  }
   return dst;
 }
 
 int
-IpAddr::load(char const* text) {
+IpAddr::load(const char *text)
+{
   IpEndpoint ip;
   int zret = ats_ip_pton(text, &ip);
-  *this = ip;
+  *this    = ip;
   return zret;
 }
 
 int
-IpAddr::load(ts::ConstBuffer const& text)
+IpAddr::load(ts::ConstBuffer const &text)
 {
   IpEndpoint ip;
   int zret = ats_ip_pton(text, &ip.sa);
@@ -347,8 +352,9 @@ IpAddr::load(ts::ConstBuffer const& text)
   return zret;
 }
 
-char*
-IpAddr::toString(char* dest, size_t len) const {
+char *
+IpAddr::toString(char *dest, size_t len) const
+{
   IpEndpoint ip;
   ip.assign(*this);
   ats_ip_ntop(&ip, dest, len);
@@ -356,14 +362,14 @@ IpAddr::toString(char* dest, size_t len) const {
 }
 
 bool
-IpAddr::isMulticast() const {
-  return (AF_INET == _family && 0xe == (_addr._byte[0] >> 4)) ||
-    (AF_INET6 == _family && IN6_IS_ADDR_MULTICAST(&_addr._ip6))
-    ;
+IpAddr::isMulticast() const
+{
+  return (AF_INET == _family && 0xe == (_addr._byte[0] >> 4)) || (AF_INET6 == _family && IN6_IS_ADDR_MULTICAST(&_addr._ip6));
 }
 
 bool
-operator == (IpAddr const& lhs, sockaddr const* rhs) {
+operator==(IpAddr const &lhs, sockaddr const *rhs)
+{
   bool zret = false;
   if (lhs._family == rhs->sa_family) {
     if (AF_INET == lhs._family) {
@@ -391,13 +397,11 @@ operator == (IpAddr const& lhs, sockaddr const* rhs) {
       - -1 if @a lhs is less than @a rhs.
       - 0 if @a lhs is identical to @a rhs.
       - 1 if @a lhs is greater than @a rhs.
-
-    @internal This looks like a lot of code for an inline but I think it
-    should compile down to something reasonable.
 */
-inline int
-IpAddr::cmp(self const& that) const {
-  int zret = 0;
+int
+IpAddr::cmp(self const &that) const
+{
+  int zret       = 0;
   uint16_t rtype = that._family;
   uint16_t ltype = _family;
 
@@ -407,9 +411,13 @@ IpAddr::cmp(self const& that) const {
     if (AF_INET == rtype) {
       in_addr_t la = ntohl(_addr._ip4);
       in_addr_t ra = ntohl(that._addr._ip4);
-      if (la < ra) zret = -1;
-      else if (la > ra) zret = 1;
-      else zret = 0;
+      if (la < ra) {
+        zret = -1;
+      } else if (la > ra) {
+        zret = 1;
+      } else {
+        zret = 0;
+      }
     } else if (AF_INET6 == rtype) { // IPv4 < IPv6
       zret = -1;
     } else { // IP > not IP
@@ -424,8 +432,7 @@ IpAddr::cmp(self const& that) const {
   } else if (AF_INET == rtype || AF_INET6 == rtype) {
     // ltype is non-IP so it's less than either IP type.
     zret = -1;
-  } else {
-    // Both types are non-IP so they're equal.
+  } else { // Both types are non-IP so they're equal.
     zret = 0;
   }
 
@@ -433,32 +440,34 @@ IpAddr::cmp(self const& that) const {
 }
 
 int
-ats_ip_getbestaddrinfo(char const* host,
-  IpEndpoint* ip4,
-  IpEndpoint* ip6
-) {
+ats_ip_getbestaddrinfo(const char *host, IpEndpoint *ip4, IpEndpoint *ip6)
+{
   int zret = -1;
   int port = 0; // port value to assign if we find an address.
   addrinfo ai_hints;
-  addrinfo* ai_result;
+  addrinfo *ai_result;
   ts::ConstBuffer addr_text, port_text;
-  ts::ConstBuffer src(host, strlen(host)+1);
+  ts::ConstBuffer src(host, strlen(host) + 1);
 
-  if (ip4) ats_ip_invalidate(ip4);
-  if (ip6) ats_ip_invalidate(ip6);
+  if (ip4) {
+    ats_ip_invalidate(ip4);
+  }
+  if (ip6) {
+    ats_ip_invalidate(ip6);
+  }
 
   if (0 == ats_ip_parse(src, &addr_text, &port_text)) {
     // Copy if not terminated.
-    if (0 != addr_text[addr_text.size()-1]) {
-      char* tmp = static_cast<char*>(alloca(addr_text.size()+1));
+    if (0 != addr_text[addr_text.size() - 1]) {
+      char *tmp = static_cast<char *>(alloca(addr_text.size() + 1));
       memcpy(tmp, addr_text.data(), addr_text.size());
       tmp[addr_text.size()] = 0;
       addr_text.set(tmp, addr_text.size());
     }
     ink_zero(ai_hints);
     ai_hints.ai_family = AF_UNSPEC;
-    ai_hints.ai_flags = AI_ADDRCONFIG;
-    zret = getaddrinfo(addr_text.data(), 0, &ai_hints, &ai_result);
+    ai_hints.ai_flags  = AI_ADDRCONFIG;
+    zret               = getaddrinfo(addr_text.data(), nullptr, &ai_hints, &ai_result);
 
     if (0 == zret) {
       // Walk the returned addresses and pick the "best".
@@ -469,109 +478,153 @@ ats_ip_getbestaddrinfo(char const* host,
         PR, // Private.
         MC, // Multicast.
         GL  // Global.
-      } spot_type = NA, ip4_type = NA, ip6_type = NA;
-      sockaddr const* ip4_src = 0;
-      sockaddr const* ip6_src = 0;
+      } spot_type = NA,
+        ip4_type = NA, ip6_type = NA;
+      sockaddr const *ip4_src = nullptr;
+      sockaddr const *ip6_src = nullptr;
 
-      for ( addrinfo* ai_spot = ai_result
-          ; ai_spot
-          ; ai_spot = ai_spot->ai_next
-      ) {
-        sockaddr const* ai_ip = ai_spot->ai_addr;
-        if (!ats_is_ip(ai_ip)) spot_type = NA;
-        else if (ats_is_ip_loopback(ai_ip)) spot_type = LO;
-        else if (ats_is_ip_linklocal(ai_ip)) spot_type = LL;
-        else if (ats_is_ip_private(ai_ip)) spot_type = PR;
-        else if (ats_is_ip_multicast(ai_ip)) spot_type = MC;
-        else spot_type = GL;
+      for (addrinfo *ai_spot = ai_result; ai_spot; ai_spot = ai_spot->ai_next) {
+        sockaddr const *ai_ip = ai_spot->ai_addr;
+        if (!ats_is_ip(ai_ip)) {
+          spot_type = NA;
+        } else if (ats_is_ip_loopback(ai_ip)) {
+          spot_type = LO;
+        } else if (ats_is_ip_linklocal(ai_ip)) {
+          spot_type = LL;
+        } else if (ats_is_ip_private(ai_ip)) {
+          spot_type = PR;
+        } else if (ats_is_ip_multicast(ai_ip)) {
+          spot_type = MC;
+        } else {
+          spot_type = GL;
+        }
 
-        if (spot_type == NA) continue; // Next!
+        if (spot_type == NA) {
+          continue; // Next!
+        }
 
         if (ats_is_ip4(ai_ip)) {
           if (spot_type > ip4_type) {
-            ip4_src = ai_ip;
+            ip4_src  = ai_ip;
             ip4_type = spot_type;
           }
         } else if (ats_is_ip6(ai_ip)) {
           if (spot_type > ip6_type) {
-            ip6_src = ai_ip;
+            ip6_src  = ai_ip;
             ip6_type = spot_type;
           }
         }
       }
-      if (ip4_type > NA) ats_ip_copy(ip4, ip4_src);
-      if (ip6_type > NA) ats_ip_copy(ip6, ip6_src);
+      if (ip4_type > NA) {
+        ats_ip_copy(ip4, ip4_src);
+      }
+      if (ip6_type > NA) {
+        ats_ip_copy(ip6, ip6_src);
+      }
       freeaddrinfo(ai_result); // free *after* the copy.
-
     }
   }
 
   // We don't really care if the port is null terminated - the parser
   // would get all the digits so the next character is a non-digit (null or
   // not) and atoi will do the right thing in either case.
-  if (port_text.size()) port = htons(atoi(port_text.data()));
-  if (ats_is_ip(ip4)) ats_ip_port_cast(ip4) = port;
-  if (ats_is_ip(ip6)) ats_ip_port_cast(ip6) = port;
+  if (port_text.size()) {
+    port = htons(atoi(port_text.data()));
+  }
+  if (ats_is_ip(ip4)) {
+    ats_ip_port_cast(ip4) = port;
+  }
+  if (ats_is_ip(ip6)) {
+    ats_ip_port_cast(ip6) = port;
+  }
 
-  if (!ats_is_ip(ip4) && !ats_is_ip(ip6)) zret = -1;
+  if (!ats_is_ip(ip4) && !ats_is_ip(ip6)) {
+    zret = -1;
+  }
 
   return zret;
 }
 
 int
-ats_ip_check_characters(ts::ConstBuffer text) {
+ats_ip_check_characters(ts::ConstBuffer text)
+{
   bool found_colon = false;
-  bool found_hex = false;
-  for ( char const *p = text.data(), *limit = p + text.size()
-      ; p < limit
-      ; ++p
-  )
-    if (':' == *p) found_colon = true;
-    else if ('.' == *p || isdigit(*p)) /* empty */;
-    else if (isxdigit(*p)) found_hex = true;
-    else return AF_UNSPEC;
+  bool found_hex   = false;
+  for (const char *p = text.data(), *limit = p + text.size(); p < limit; ++p) {
+    if (':' == *p) {
+      found_colon = true;
+    } else if ('.' == *p || isdigit(*p)) { /* empty */
+      ;
+    } else if (isxdigit(*p)) {
+      found_hex = true;
+    } else {
+      return AF_UNSPEC;
+    }
+  }
 
-  return found_hex && !found_colon ? AF_UNSPEC
-    : found_colon ? AF_INET6
-    : AF_INET
-    ;
+  return found_hex && !found_colon ? AF_UNSPEC : found_colon ? AF_INET6 : AF_INET;
 }
 
 // Need to declare this type globally so gcc 4.4 can use it in the countof() template ...
-struct ip_parse_spec { const char * hostspec; const char * host; const char * port; };
+struct ip_parse_spec {
+  const char *hostspec;
+  const char *host;
+  const char *port;
+  const char *rest;
+};
 
-REGRESSION_TEST(Ink_Inet) (RegressionTest * t, int /* atype */, int * pstatus) {
+REGRESSION_TEST(Ink_Inet)(RegressionTest *t, int /* atype */, int *pstatus)
+{
   TestBox box(t, pstatus);
-  IpEndpoint  ep;
-  IpAddr      addr;
+  IpEndpoint ep;
+  IpAddr addr;
 
   box = REGRESSION_TEST_PASSED;
 
   // Test ats_ip_parse() ...
   {
     struct ip_parse_spec names[] = {
-      { "::", "::", NULL },
-      { "[::1]:99", "::1", "99" },
-      { "127.0.0.1:8080", "127.0.0.1", "8080" },
-      { "foo.example.com", "foo.example.com", NULL },
-      { "foo.example.com:99", "foo.example.com", "99" },
+      {"::", "::", nullptr, nullptr},
+      {"[::1]:99", "::1", "99", nullptr},
+      {"127.0.0.1:8080", "127.0.0.1", "8080", nullptr},
+      {"127.0.0.1:8080-Bob", "127.0.0.1", "8080", "-Bob"},
+      {"127.0.0.1:", "127.0.0.1", nullptr, ":"},
+      {"foo.example.com", "foo.example.com", nullptr, nullptr},
+      {"foo.example.com:99", "foo.example.com", "99", nullptr},
+      {"ffee::24c3:3349:3cee:0143", "ffee::24c3:3349:3cee:0143", nullptr, nullptr},
+      {"fe80:88b5:4a:20c:29ff:feae:1c33:8080", "fe80:88b5:4a:20c:29ff:feae:1c33:8080", nullptr, nullptr},
+      {"[ffee::24c3:3349:3cee:0143]", "ffee::24c3:3349:3cee:0143", nullptr, nullptr},
+      {"[ffee::24c3:3349:3cee:0143]:80", "ffee::24c3:3349:3cee:0143", "80", nullptr},
+      {"[ffee::24c3:3349:3cee:0143]:8080x", "ffee::24c3:3349:3cee:0143", "8080", "x"},
     };
 
     for (unsigned i = 0; i < countof(names); ++i) {
-      ts::ConstBuffer addr, port;
+      ip_parse_spec const &s = names[i];
+      ts::ConstBuffer host, port, rest;
+      size_t len;
 
-      box.check(ats_ip_parse(ts::ConstBuffer(names[i].hostspec, strlen(names[i].hostspec)), &addr, &port) == 0,
-          "ats_ip_parse(%s)", names[i].hostspec);
-      box.check(strncmp(addr.data(), names[i].host, addr.size()) ==  0,
-          "ats_ip_parse(%s) gave addr '%.*s'", names[i].hostspec, (int)addr.size(), addr.data());
-      if (names[i].port) {
-        box.check(strncmp(port.data(), names[i].port, port.size()) ==  0,
-          "ats_ip_parse(%s) gave port '%.*s'", names[i].hostspec, (int)port.size(), port.data());
+      box.check(ats_ip_parse(ts::ConstBuffer(s.hostspec, strlen(s.hostspec)), &host, &port, &rest) == 0, "ats_ip_parse(%s)",
+                s.hostspec);
+      len = strlen(s.host);
+      box.check(len == host.size() && strncmp(host.data(), s.host, host.size()) == 0, "ats_ip_parse(%s) gave addr '%.*s'",
+                s.hostspec, static_cast<int>(host.size()), host.data());
+      if (s.port) {
+        len = strlen(s.port);
+        box.check(len == port.size() && strncmp(port.data(), s.port, port.size()) == 0, "ats_ip_parse(%s) gave port '%.*s'",
+                  s.hostspec, static_cast<int>(port.size()), port.data());
       } else {
-        box.check(port.size() == 0,
-          "ats_ip_parse(%s) gave port '%.*s'", names[i].hostspec, (int)port.size(), port.data());
+        box.check(port.size() == 0, "ats_ip_parse(%s) gave port '%.*s' instead of empty", s.hostspec, static_cast<int>(port.size()),
+                  port.data());
       }
 
+      if (s.rest) {
+        len = strlen(s.rest);
+        box.check(len == rest.size() && strncmp(rest.data(), s.rest, len) == 0, "ats_ip_parse(%s) gave rest '%.*s' instead of '%s'",
+                  s.hostspec, static_cast<int>(rest.size()), rest.data(), s.rest);
+      } else {
+        box.check(rest.size() == 0, "ats_ip_parse(%s) gave rest '%.*s' instead of empty", s.hostspec, static_cast<int>(rest.size()),
+                  rest.data());
+      }
     }
   }
 
@@ -588,10 +641,40 @@ REGRESSION_TEST(Ink_Inet) (RegressionTest * t, int /* atype */, int * pstatus) {
     case AF_INET6:
       box.check(memcmp(&ep.sin6.sin6_addr, &addr._addr._ip6, sizeof(in6_addr)) == 0, "IPv6 address mismatch");
       break;
-    default:
-      ;
+    default:;
     }
   }
+}
 
+int
+ats_tcp_somaxconn()
+{
+  int fd;
+  int value = 0;
 
+/* Darwin version ... */
+#if HAVE_SYSCTLBYNAME
+  size_t value_size = sizeof(value);
+  if (sysctlbyname("kern.ipc.somaxconn", &value, &value_size, nullptr, 0) == 0) {
+    return value;
+  }
+#endif
+
+  fd = open("/proc/sys/net/ipv4/tcp_max_syn_backlog", O_RDONLY);
+  if (fd != -1) {
+    TextBuffer text(0);
+    text.slurp(fd);
+    if (!text.empty()) {
+      value = strtoul(text.bufPtr(), nullptr, 10);
+    }
+    close(fd);
+  }
+
+  // Default to the compatible value we used before detection. SOMAXCONN is the right
+  // macro to use, but most systems set this to 128, which is just too small.
+  if (value <= 0) {
+    return 1024;
+  }
+
+  return value;
 }

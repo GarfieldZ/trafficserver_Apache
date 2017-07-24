@@ -25,21 +25,20 @@
 #ifndef _EThread_h_
 #define _EThread_h_
 
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_rand.h"
+#include "ts/I_Version.h"
 #include "I_Thread.h"
 #include "I_PriorityEventQueue.h"
 #include "I_ProtectedQueue.h"
 
 // TODO: This would be much nicer to have "run-time" configurable (or something),
 // perhaps based on proxy.config.stat_api.max_stats_allowed or other configs. XXX
-#define PER_THREAD_DATA (1024*1024)
+#define PER_THREAD_DATA (1024 * 1024)
 
 // This is not used by the cache anymore, it uses proxy.config.cache.mutex_retry_delay
 // instead.
 #define MUTEX_RETRY_DELAY HRTIME_MSECONDS(20)
-
-/** Maximum number of accept events per thread. */
-#define MAX_ACCEPT_EVENTS 20
 
 struct DiskHandler;
 struct EventIO;
@@ -50,10 +49,10 @@ class Continuation;
 
 enum ThreadType {
   REGULAR = 0,
-  MONITOR,
-  DEDICATED
+  DEDICATED,
 };
 
+extern volatile bool shutdown_event_system;
 
 /**
   Event System specific type of thread.
@@ -84,7 +83,7 @@ enum ThreadType {
   @see Event
 
 */
-class EThread: public Thread
+class EThread : public Thread
 {
 public:
   /*-------------------------------------------------------*\
@@ -108,8 +107,8 @@ public:
       of this callback.
 
   */
-  Event *schedule_imm(Continuation *c, int callback_event = EVENT_IMMEDIATE, void *cookie = NULL);
-  Event *schedule_imm_signal(Continuation *c, int callback_event = EVENT_IMMEDIATE, void *cookie = NULL);
+  Event *schedule_imm(Continuation *c, int callback_event = EVENT_IMMEDIATE, void *cookie = nullptr);
+  Event *schedule_imm_signal(Continuation *c, int callback_event = EVENT_IMMEDIATE, void *cookie = nullptr);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -130,8 +129,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_at(Continuation *c,
-                     ink_hrtime atimeout_at, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_at(Continuation *c, ink_hrtime atimeout_at, int callback_event = EVENT_INTERVAL, void *cookie = nullptr);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -151,8 +149,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_in(Continuation *c,
-                     ink_hrtime atimeout_in, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_in(Continuation *c, ink_hrtime atimeout_in, int callback_event = EVENT_INTERVAL, void *cookie = nullptr);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -173,7 +170,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_every(Continuation *c, ink_hrtime aperiod, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_every(Continuation *c, ink_hrtime aperiod, int callback_event = EVENT_INTERVAL, void *cookie = nullptr);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -191,7 +188,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_imm_local(Continuation *c, int callback_event = EVENT_IMMEDIATE, void *cookie = NULL);
+  Event *schedule_imm_local(Continuation *c, int callback_event = EVENT_IMMEDIATE, void *cookie = nullptr);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -212,8 +209,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_at_local(Continuation *c,
-                           ink_hrtime atimeout_at, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_at_local(Continuation *c, ink_hrtime atimeout_at, int callback_event = EVENT_INTERVAL, void *cookie = nullptr);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -234,8 +230,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_in_local(Continuation *c,
-                           ink_hrtime atimeout_in, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_in_local(Continuation *c, ink_hrtime atimeout_in, int callback_event = EVENT_INTERVAL, void *cookie = nullptr);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -255,38 +250,42 @@ public:
       of this callback.
 
   */
-  Event *schedule_every_local(Continuation *c,
-                              ink_hrtime aperiod, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_every_local(Continuation *c, ink_hrtime aperiod, int callback_event = EVENT_INTERVAL, void *cookie = nullptr);
+
+  /** Schedule an event called once when the thread is spawned.
+
+      This is useful only for regular threads and if called before @c Thread::start. The event will be
+      called first before the event loop.
+
+      @Note This will override the event for a dedicate thread so that this is called instead of the
+      event passed to the constructor.
+  */
+  Event *schedule_spawn(Continuation *c, int ev = EVENT_IMMEDIATE, void *cookie = nullptr);
 
   /* private */
 
   Event *schedule_local(Event *e);
 
-  InkRand generator;
-
-private:
-  // prevent unauthorized copies (Not implemented)
-  EThread(const EThread &);
-  EThread & operator =(const EThread &);
+  InkRand generator = static_cast<uint64_t>(Thread::get_hrtime_updated() ^ reinterpret_cast<uintptr_t>(this));
 
   /*-------------------------------------------------------*\
   |  UNIX Interface                                         |
   \*-------------------------------------------------------*/
 
-public:
   EThread();
   EThread(ThreadType att, int anid);
   EThread(ThreadType att, Event *e);
+  EThread(const EThread &) = delete;
+  EThread &operator=(const EThread &) = delete;
   virtual ~EThread();
 
-  Event *schedule_spawn(Continuation *cont);
   Event *schedule(Event *e, bool fast_signal = false);
 
   /** Block of memory to allocate thread specific data e.g. stat system arrays. */
   char thread_private[PER_THREAD_DATA];
 
   /** Private Data for the Disk Processor. */
-  DiskHandler *diskHandler;
+  DiskHandler *diskHandler = nullptr;
 
   /** Private Data for AIO. */
   Que(Continuation, link) aio_ops;
@@ -294,35 +293,41 @@ public:
   ProtectedQueue EventQueueExternal;
   PriorityEventQueue EventQueue;
 
-  EThread **ethreads_to_be_signalled;
-  int n_ethreads_to_be_signalled;
+  EThread **ethreads_to_be_signalled = nullptr;
+  int n_ethreads_to_be_signalled     = 0;
 
-  Event *accept_event[MAX_ACCEPT_EVENTS];
-  int main_accept_index;
-
-  int id;
-  unsigned int event_types;
+  static constexpr int NO_ETHREAD_ID = -1;
+  int id                             = NO_ETHREAD_ID;
+  unsigned int event_types           = 0;
   bool is_event_type(EventType et);
   void set_event_type(EventType et);
 
   // Private Interface
 
-  void execute();
+  void execute() override;
   void process_event(Event *e, int calling_code);
   void free_event(Event *e);
-  void (*signal_hook)(EThread *);
+  void (*signal_hook)(EThread *) = nullptr;
 
 #if HAVE_EVENTFD
-  int evfd;
+  int evfd = ts::NO_FD;
 #else
   int evpipe[2];
 #endif
-  EventIO *ep;
+  EventIO *ep = nullptr;
 
-  ThreadType tt;
-  Event *oneevent;              // For dedicated event thread
+  ThreadType tt = REGULAR;
+  /** Initial event to call, before any scheduling.
 
-  ServerSessionPool* server_session_pool;
+      For dedicated threads this is the only event called.
+      For regular threads this is called first before the event loop starts.
+      @internal For regular threads this is used by the EventProcessor to get called back after
+      the thread starts but before any other events can be dispatched to provide initializations
+      needed for the thread.
+  */
+  Event *start_event = nullptr;
+
+  ServerSessionPool *server_session_pool = nullptr;
 };
 
 /**
@@ -334,12 +339,12 @@ class ink_dummy_for_new
 {
 };
 
-inline void *operator
-new(size_t, ink_dummy_for_new *p)
+inline void *
+operator new(size_t, ink_dummy_for_new *p)
 {
-  return (void *) p;
+  return (void *)p;
 }
-#define ETHREAD_GET_PTR(thread, offset) ((void*)((char*)(thread)+(offset)))
+#define ETHREAD_GET_PTR(thread, offset) ((void *)((char *)(thread) + (offset)))
 
 extern EThread *this_ethread();
 #endif /*_EThread_h_*/

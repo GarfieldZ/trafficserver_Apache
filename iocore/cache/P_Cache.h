@@ -24,17 +24,14 @@
 #ifndef _P_CACHE_H__
 #define _P_CACHE_H__
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "P_EventSystem.h"
 #include "P_AIO.h"
 #include "I_RecProcess.h"
 
-#ifdef HTTP_CACHE
 #include "HTTP.h"
 #include "MIME.h"
-#include "MimeTable.h"
 #include "HttpTransactCache.h"
-#endif
 
 #include "I_Cache.h"
 #include "P_CacheDisk.h"

@@ -25,13 +25,12 @@
   recording log entries. See the header file LogBuffer.h for more
   information on the structure of a LogBuffer.
  */
-#include "libts.h"
+#include "ts/ink_platform.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
-#include "Error.h"
 #include "P_EventSystem.h"
 #include "LogField.h"
 #include "LogFilter.h"
@@ -45,21 +44,18 @@
 #include "LogBuffer.h"
 #include "Log.h"
 
-
-struct FieldListCacheElement
-{
+struct FieldListCacheElement {
   LogFieldList *fieldlist;
   char *symbol_str;
 };
 
-enum
-{
-  FIELDLIST_CACHE_SIZE = 256
+enum {
+  FIELDLIST_CACHE_SIZE = 256,
 };
 
 FieldListCacheElement fieldlist_cache[FIELDLIST_CACHE_SIZE];
 int fieldlist_cache_entries = 0;
-vint32 LogBuffer::M_ID = 0;
+vint32 LogBuffer::M_ID      = 0;
 
 /*-------------------------------------------------------------------------
   The following LogBufferHeader routines are used to grab strings out from
@@ -69,9 +65,9 @@ vint32 LogBuffer::M_ID = 0;
 char *
 LogBufferHeader::fmt_name()
 {
-  char *addr = NULL;
+  char *addr = nullptr;
   if (fmt_name_offset) {
-    addr = (char *) this + fmt_name_offset;
+    addr = (char *)this + fmt_name_offset;
   }
   return addr;
 }
@@ -79,9 +75,9 @@ LogBufferHeader::fmt_name()
 char *
 LogBufferHeader::fmt_fieldlist()
 {
-  char *addr = NULL;
+  char *addr = nullptr;
   if (fmt_fieldlist_offset) {
-    addr = (char *) this + fmt_fieldlist_offset;
+    addr = (char *)this + fmt_fieldlist_offset;
   }
   return addr;
 }
@@ -89,9 +85,9 @@ LogBufferHeader::fmt_fieldlist()
 char *
 LogBufferHeader::fmt_printf()
 {
-  char *addr = NULL;
+  char *addr = nullptr;
   if (fmt_printf_offset) {
-    addr = (char *) this + fmt_printf_offset;
+    addr = (char *)this + fmt_printf_offset;
   }
   return addr;
 }
@@ -99,9 +95,9 @@ LogBufferHeader::fmt_printf()
 char *
 LogBufferHeader::src_hostname()
 {
-  char *addr = NULL;
+  char *addr = nullptr;
   if (src_hostname_offset) {
-    addr = (char *) this + src_hostname_offset;
+    addr = (char *)this + src_hostname_offset;
   }
   return addr;
 }
@@ -109,26 +105,15 @@ LogBufferHeader::src_hostname()
 char *
 LogBufferHeader::log_filename()
 {
-  char *addr = NULL;
+  char *addr = nullptr;
   if (log_filename_offset) {
-    addr = (char *) this + log_filename_offset;
+    addr = (char *)this + log_filename_offset;
   }
   return addr;
 }
 
-/*-------------------------------------------------------------------------
-  LogBuffer::LogBuffer
-
-  Initialize a LogBuffer object, which is just an AbstractBuffer object
-  with the addition of a pointer for keeping track of the LogObject object
-  that is allocating this buffer.
-  -------------------------------------------------------------------------*/
-
-LogBuffer::LogBuffer(LogObject * owner, size_t size, size_t buf_align, size_t write_align):
-  m_size(size),
-  m_buf_align(buf_align),
-  m_write_align(write_align), m_owner(owner),
-  m_references(0)
+LogBuffer::LogBuffer(LogObject *owner, size_t size, size_t buf_align, size_t write_align)
+  : m_size(size), m_buf_align(buf_align), m_write_align(write_align), m_owner(owner), m_references(0)
 {
   size_t hdr_size;
 
@@ -138,10 +123,10 @@ LogBuffer::LogBuffer(LogObject * owner, size_t size, size_t buf_align, size_t wr
 
   if (alloc_size <= max_iobuffer_size) {
     m_buffer_fast_allocator_size = buffer_size_to_index(alloc_size);
-    m_unaligned_buffer = (char *) ioBufAllocator[m_buffer_fast_allocator_size].alloc_void();
+    m_unaligned_buffer           = (char *)ioBufAllocator[m_buffer_fast_allocator_size].alloc_void();
   } else {
     m_buffer_fast_allocator_size = -1;
-    m_unaligned_buffer = (char *)ats_malloc(alloc_size);
+    m_unaligned_buffer           = (char *)ats_malloc(alloc_size);
   }
   m_buffer = (char *)align_pointer_forward(m_unaligned_buffer, buf_align);
 
@@ -152,21 +137,25 @@ LogBuffer::LogBuffer(LogObject * owner, size_t size, size_t buf_align, size_t wr
   m_state.s.offset = hdr_size;
 
   // update the buffer id (m_id gets the old value)
-  m_id = (uint32_t) ink_atomic_increment((pvint32) & M_ID, 1);
+  m_id = (uint32_t)ink_atomic_increment((pvint32)&M_ID, 1);
 
   m_expiration_time = LogUtils::timestamp() + Log::config->max_secs_per_buffer;
 
-  Debug("log-logbuffer","[%p] Created buffer %u for %s at address %p, size %d",
-        this_ethread(), m_id, m_owner->get_base_filename(), m_buffer, (int)size);
+  Debug("log-logbuffer", "[%p] Created buffer %u for %s at address %p, size %d", this_ethread(), m_id, m_owner->get_base_filename(),
+        m_buffer, (int)size);
 }
 
-LogBuffer::LogBuffer(LogObject * owner, LogBufferHeader * header):
-  m_unaligned_buffer(NULL),
-  m_buffer((char *) header),
-  m_size(0),
-  m_buf_align(LB_DEFAULT_ALIGN),
-  m_write_align(INK_MIN_ALIGN), m_buffer_fast_allocator_size(-1), m_expiration_time(0), m_owner(owner), m_header(header),
-  m_references(0)
+LogBuffer::LogBuffer(LogObject *owner, LogBufferHeader *header)
+  : m_unaligned_buffer(nullptr),
+    m_buffer((char *)header),
+    m_size(0),
+    m_buf_align(LB_DEFAULT_ALIGN),
+    m_write_align(INK_MIN_ALIGN),
+    m_buffer_fast_allocator_size(-1),
+    m_expiration_time(0),
+    m_owner(owner),
+    m_header(header),
+    m_references(0)
 {
   // This constructor does not allocate a buffer because it gets it as
   // an argument. We set m_unaligned_buffer to NULL, which means that
@@ -175,16 +164,16 @@ LogBuffer::LogBuffer(LogObject * owner, LogBufferHeader * header):
 
   // update the buffer id (m_id gets the old value)
   //
-  m_id = (uint32_t) ink_atomic_increment((pvint32) & M_ID, 1);
+  m_id = (uint32_t)ink_atomic_increment((pvint32)&M_ID, 1);
 
-  Debug("log-logbuffer","[%p] Created repurposed buffer %u for %s at address %p",
-        this_ethread(), m_id, m_owner->get_base_filename(), m_buffer);
+  Debug("log-logbuffer", "[%p] Created repurposed buffer %u for %s at address %p", this_ethread(), m_id,
+        m_owner->get_base_filename(), m_buffer);
 }
 
 void
 LogBuffer::freeLogBuffer()
 {
-  char *log_buffer = NULL;
+  char *log_buffer = nullptr;
 
   if (m_unaligned_buffer) {
     log_buffer = m_unaligned_buffer;
@@ -195,7 +184,7 @@ LogBuffer::freeLogBuffer()
     Debug("log-logbuffer", "[%p] Deleting buffer %u at address %p", this_ethread(), m_id, log_buffer);
     if (m_buffer_fast_allocator_size >= 0) {
       ioBufAllocator[m_buffer_fast_allocator_size].free_void(log_buffer);
-    } else{
+    } else {
       ats_free(log_buffer);
     }
   }
@@ -204,15 +193,16 @@ LogBuffer::freeLogBuffer()
 LogBuffer::~LogBuffer()
 {
   freeLogBuffer();
-  m_buffer = 0;
-  m_unaligned_buffer = 0;
+  m_buffer           = nullptr;
+  m_unaligned_buffer = nullptr;
 }
 
 /*-------------------------------------------------------------------------
   LogBuffer::checkout_write
   -------------------------------------------------------------------------*/
 
-LogBuffer::LB_ResultCode LogBuffer::checkout_write(size_t * write_offset, size_t write_size)
+LogBuffer::LB_ResultCode
+LogBuffer::checkout_write(size_t *write_offset, size_t write_size)
 {
   // checkout_write should not be called if m_unaligned_buffer was
   // not allocated, which means that the actual buffer data was given
@@ -224,12 +214,14 @@ LogBuffer::LB_ResultCode LogBuffer::checkout_write(size_t * write_offset, size_t
 
   LB_ResultCode ret_val = LB_BUSY;
   LB_State old_s, new_s;
-  size_t offset = 0;
+  size_t offset            = 0;
   size_t actual_write_size = INK_ALIGN(write_size + sizeof(LogEntryHeader), m_write_align);
 
-  uint64_t retries = (uint64_t) - 1;
+  uint64_t retries = (uint64_t)-1;
   do {
-    new_s = old_s = m_state;
+    // we want sequence points between these two statements
+    old_s = m_state;
+    new_s = old_s;
 
     if (old_s.s.full) {
       // the buffer has already been set to full by somebody else
@@ -258,7 +250,7 @@ LogBuffer::LB_ResultCode LogBuffer::checkout_write(size_t * write_offset, size_t
             ret_val = LB_BUFFER_TOO_SMALL;
           } else {
             new_s.s.full = 1;
-            ret_val = old_s.s.num_writers ? LB_FULL_ACTIVE_WRITERS : LB_FULL_NO_WRITERS;
+            ret_val      = old_s.s.num_writers ? LB_FULL_ACTIVE_WRITERS : LB_FULL_NO_WRITERS;
           }
         }
       } else {
@@ -290,25 +282,24 @@ LogBuffer::LB_ResultCode LogBuffer::checkout_write(size_t * write_offset, size_t
   //
   if (write_offset && ret_val == LB_OK) {
     // disable statistics for now
-    //ProxyMutex *mutex = this_ethread()->mutex;
-    //ink_release_assert(mutex->thread_holding == this_ethread());
-    //SUM_DYN_STAT(log_stat_bytes_buffered_stat, actual_write_size);
+    // ProxyMutex *mutex = this_ethread()->mutex;
+    // ink_release_assert(mutex->thread_holding == this_ethread());
+    // SUM_DYN_STAT(log_stat_bytes_buffered_stat, actual_write_size);
 
-    LogEntryHeader *entry_header = (LogEntryHeader *) & m_buffer[offset];
-    //entry_header->timestamp = LogUtils::timestamp();
-    struct timeval tp;
+    LogEntryHeader *entry_header = (LogEntryHeader *)&m_buffer[offset];
+    // entry_header->timestamp = LogUtils::timestamp();
+    struct timeval tp = ink_gettimeofday();
 
-    ink_gethrtimeofday(&tp, 0);
-    entry_header->timestamp = tp.tv_sec;
+    entry_header->timestamp      = tp.tv_sec;
     entry_header->timestamp_usec = tp.tv_usec;
-    entry_header->entry_len = actual_write_size;
+    entry_header->entry_len      = actual_write_size;
 
     *write_offset = offset + sizeof(LogEntryHeader);
   }
-//    Debug("log-logbuffer","[%p] %s for buffer %u (%s) returning %d",
-//        this_ethread(),
-//        (write_offset ? "checkout_write" : "force_new_buffer"),
-//        m_id, m_owner->get_base_filename(), ret_val);
+  //    Debug("log-logbuffer","[%p] %s for buffer %u (%s) returning %d",
+  //        this_ethread(),
+  //        (write_offset ? "checkout_write" : "force_new_buffer"),
+  //        m_id, m_owner->get_base_filename(), ret_val);
 
   return ret_val;
 }
@@ -317,7 +308,8 @@ LogBuffer::LB_ResultCode LogBuffer::checkout_write(size_t * write_offset, size_t
   LogBuffer::checkin_write
   -------------------------------------------------------------------------*/
 
-LogBuffer::LB_ResultCode LogBuffer::checkin_write(size_t write_offset)
+LogBuffer::LB_ResultCode
+LogBuffer::checkin_write(size_t write_offset)
 {
   // checkin_write should not be called if m_unaligned_buffer was
   // not allocated, which means that the actual buffer data was given
@@ -342,13 +334,12 @@ LogBuffer::LB_ResultCode LogBuffer::checkin_write(size_t write_offset)
 
   } while (!switch_state(old_s, new_s));
 
-//    Debug("log-logbuffer","[%p] checkin_write for buffer %u (%s) "
-//        "returning %d (%u writers left)", this_ethread(),
-//        m_id, m_owner->get_base_filename(), ret_val, writers_left);
+  //    Debug("log-logbuffer","[%p] checkin_write for buffer %u (%s) "
+  //        "returning %d (%u writers left)", this_ethread(),
+  //        m_id, m_owner->get_base_filename(), ret_val, writers_left);
 
   return ret_val;
 }
-
 
 unsigned
 LogBuffer::add_header_str(const char *str, char *buf_ptr, unsigned buf_len)
@@ -357,12 +348,11 @@ LogBuffer::add_header_str(const char *str, char *buf_ptr, unsigned buf_len)
   // This was ambiguous - should it be the real strlen or the
   // rounded up value? Given the +1, presumably it's the real length
   // plus the terminating nul.
-  if (likely(str && (len = (unsigned) (::strlen(str) + 1)) < buf_len)) {
+  if (likely(str && (len = (unsigned)(::strlen(str) + 1)) < buf_len)) {
     ink_strlcpy(buf_ptr, str, buf_len);
   }
   return len;
 }
-
 
 size_t
 LogBuffer::_add_buffer_header()
@@ -372,16 +362,16 @@ LogBuffer::_add_buffer_header()
   //
   // initialize the header
   //
-  LogFormat *fmt = m_owner->m_format;
-  m_header = (LogBufferHeader *) m_buffer;
-  m_header->cookie = LOG_SEGMENT_COOKIE;
-  m_header->version = LOG_SEGMENT_VERSION;
-  m_header->format_type = fmt->type();
-  m_header->entry_count = 0;
-  m_header->low_timestamp = LogUtils::timestamp();
-  m_header->high_timestamp = 0;
+  LogFormat *fmt                 = m_owner->m_format;
+  m_header                       = (LogBufferHeader *)m_buffer;
+  m_header->cookie               = LOG_SEGMENT_COOKIE;
+  m_header->version              = LOG_SEGMENT_VERSION;
+  m_header->format_type          = fmt->type();
+  m_header->entry_count          = 0;
+  m_header->low_timestamp        = LogUtils::timestamp();
+  m_header->high_timestamp       = 0;
   m_header->log_object_signature = m_owner->get_signature();
-  m_header->log_object_flags = m_owner->get_flags();
+  m_header->log_object_flags     = m_owner->get_flags();
 #if defined(LOG_BUFFER_TRACKING)
   m_header->id = lrand48();
 #endif // defined(LOG_BUFFER_TRACKING)
@@ -394,11 +384,11 @@ LogBuffer::_add_buffer_header()
 
   header_len = sizeof(LogBufferHeader); // at least ...
 
-  m_header->fmt_name_offset = 0;
+  m_header->fmt_name_offset      = 0;
   m_header->fmt_fieldlist_offset = 0;
-  m_header->fmt_printf_offset = 0;
-  m_header->src_hostname_offset = 0;
-  m_header->log_filename_offset = 0;
+  m_header->fmt_printf_offset    = 0;
+  m_header->src_hostname_offset  = 0;
+  m_header->log_filename_offset  = 0;
 
   if (fmt->name()) {
     m_header->fmt_name_offset = header_len;
@@ -427,7 +417,7 @@ LogBuffer::_add_buffer_header()
 
   header_len = INK_ALIGN_DEFAULT(header_len);
 
-  m_header->byte_count = header_len;
+  m_header->byte_count  = header_len;
   m_header->data_offset = header_len;
 
   return header_len;
@@ -441,8 +431,8 @@ LogBuffer::update_header_data()
   //
 
   if (m_unaligned_buffer) {
-    m_header->entry_count = m_state.s.num_entries;
-    m_header->byte_count = m_state.s.offset;
+    m_header->entry_count    = m_state.s.num_entries;
+    m_header->byte_count     = m_state.s.offset;
     m_header->high_timestamp = LogUtils::timestamp();
   }
 }
@@ -453,7 +443,8 @@ LogBuffer::update_header_data()
   This static function simply returns the greatest number of bytes than an
   entry can be and fit into a LogBuffer.
   -------------------------------------------------------------------------*/
-size_t LogBuffer::max_entry_bytes()
+size_t
+LogBuffer::max_entry_bytes()
 {
   return (Log::config->log_buffer_size - sizeof(LogBufferHeader));
 }
@@ -462,20 +453,20 @@ size_t LogBuffer::max_entry_bytes()
   LogBuffer::resolve_custom_entry
   -------------------------------------------------------------------------*/
 int
-LogBuffer::resolve_custom_entry(LogFieldList * fieldlist,
-                                char *printf_str, char *read_from, char *write_to,
-                                int write_to_len, long timestamp, long timestamp_usec,
-                                unsigned buffer_version, LogFieldList * alt_fieldlist, char *alt_printf_str)
+LogBuffer::resolve_custom_entry(LogFieldList *fieldlist, char *printf_str, char *read_from, char *write_to, int write_to_len,
+                                long timestamp, long timestamp_usec, unsigned buffer_version, LogFieldList *alt_fieldlist,
+                                char *alt_printf_str)
 {
-  if (fieldlist == NULL || printf_str == NULL)
+  if (fieldlist == nullptr || printf_str == nullptr) {
     return 0;
+  }
 
-  int *readfrom_map = NULL;
+  int *readfrom_map = nullptr;
 
   if (alt_fieldlist && alt_printf_str) {
     LogField *f, *g;
     int n_alt_fields = alt_fieldlist->count();
-    int i = 0;
+    int i            = 0;
 
     readfrom_map = (int *)ats_malloc(n_alt_fields * sizeof(int));
     for (f = alt_fieldlist->first(); f; f = alt_fieldlist->next(f)) {
@@ -483,7 +474,7 @@ LogBuffer::resolve_custom_entry(LogFieldList * fieldlist,
       bool found_match = false;
       for (g = fieldlist->first(); g; g = fieldlist->next(g)) {
         if (strcmp(f->symbol(), g->symbol()) == 0) {
-          found_match = true;
+          found_match       = true;
           readfrom_map[i++] = readfrom_pos;
           break;
         }
@@ -491,7 +482,9 @@ LogBuffer::resolve_custom_entry(LogFieldList * fieldlist,
         // readfrom_pos += g->size();
       }
       if (!found_match) {
-        Note("Alternate format contains a field (%s) not in the " "format logged", f->symbol());
+        Note("Alternate format contains a field (%s) not in the "
+             "format logged",
+             f->symbol());
         break;
       }
     }
@@ -503,111 +496,22 @@ LogBuffer::resolve_custom_entry(LogFieldList * fieldlist,
   // LogField object, obtained from the fieldlist.
   //
 
-  LogField *field = fieldlist->first();
-  int printf_len = (int)::strlen(printf_str);   // OPTIMIZE
-  int bytes_written = 0;
+  LogField *field     = fieldlist->first();
+  LogField *lastField = nullptr;                                // For debug message.
+  int markCount       = 0;                                      // For debug message.
+  int printf_len      = static_cast<int>(::strlen(printf_str)); // OPTIMIZE
+  int bytes_written   = 0;
   int res, i;
 
-  const char *buffer_size_exceeded_msg =
-    "Traffic Server is skipping the current log entry because its size "
-    "exceeds the maximum line (entry) size for an ascii log buffer";
+  const char *buffer_size_exceeded_msg = "Traffic Server is skipping the current log entry because its size "
+                                         "exceeds the maximum line (entry) size for an ascii log buffer";
 
   for (i = 0; i < printf_len; i++) {
     if (printf_str[i] == LOG_FIELD_MARKER) {
-      if (field != NULL) {
+      ++markCount;
+      if (field != nullptr) {
         char *to = &write_to[bytes_written];
-
-        // for timestamps that are not aggregates, we take the
-        // value from the function argument;  otherwise we use the
-        // unmarshaling function
-        bool non_aggregate_timestamp = false;
-
-        if (field->aggregate() == LogField::NO_AGGREGATE) {
-          char *sym = field->symbol();
-
-          if (strcmp(sym, "cqts") == 0) {
-            char *ptr = (char *) &timestamp;
-            res = LogAccess::unmarshal_int_to_str(&ptr, to, write_to_len - bytes_written);
-            if (buffer_version > 1) {
-              // space was reserved in read buffer; remove it
-              read_from += INK_MIN_ALIGN;
-            }
-
-            non_aggregate_timestamp = true;
-
-          } else if (strcmp(sym, "cqth") == 0) {
-            char *ptr = (char *) &timestamp;
-            res = LogAccess::unmarshal_int_to_str_hex(&ptr, to, write_to_len - bytes_written);
-            if (buffer_version > 1) {
-              // space was reserved in read buffer; remove it
-              read_from += INK_MIN_ALIGN;
-            }
-
-            non_aggregate_timestamp = true;
-
-          } else if (strcmp(sym, "cqtq") == 0) {
-            // From lib/ts
-            res = squid_timestamp_to_buf(to, write_to_len - bytes_written, timestamp, timestamp_usec);
-            if (res < 0)
-              res = -1;
-
-            if (buffer_version > 1) {
-              // space was reserved in read buffer; remove it
-              read_from += INK_MIN_ALIGN;
-            }
-
-            non_aggregate_timestamp = true;
-
-          } else if (strcmp(sym, "cqtn") == 0) {
-            char *str = LogUtils::timestamp_to_netscape_str(timestamp);
-            res = (int)::strlen(str);
-            if (res < write_to_len - bytes_written) {
-              memcpy(to, str, res);
-            } else {
-              res = -1;
-            }
-            if (buffer_version > 1) {
-              // space was reserved in read buffer; remove it
-              read_from += INK_MIN_ALIGN;
-            }
-
-            non_aggregate_timestamp = true;
-
-          } else if (strcmp(sym, "cqtd") == 0) {
-            char *str = LogUtils::timestamp_to_date_str(timestamp);
-            res = (int)::strlen(str);
-            if (res < write_to_len - bytes_written) {
-              memcpy(to, str, res);
-            } else {
-              res = -1;
-            }
-            if (buffer_version > 1) {
-              // space was reserved in read buffer; remove it
-              read_from += INK_MIN_ALIGN;
-            }
-
-            non_aggregate_timestamp = true;
-
-          } else if (strcmp(sym, "cqtt") == 0) {
-            char *str = LogUtils::timestamp_to_time_str(timestamp);
-            res = (int)::strlen(str);
-            if (res < write_to_len - bytes_written) {
-              memcpy(to, str, res);
-            } else {
-              res = -1;
-            }
-            if (buffer_version > 1) {
-              // space was reserved in read buffer; remove it
-              read_from += INK_MIN_ALIGN;
-            }
-
-            non_aggregate_timestamp = true;
-          }
-        }
-
-        if (!non_aggregate_timestamp) {
-          res = field->unmarshal(&read_from, to, write_to_len - bytes_written);
-        }
+        res      = field->unmarshal(&read_from, to, write_to_len - bytes_written);
 
         if (res < 0) {
           Note("%s", buffer_size_exceeded_msg);
@@ -616,9 +520,14 @@ LogBuffer::resolve_custom_entry(LogFieldList * fieldlist,
         }
 
         bytes_written += res;
-        field = fieldlist->next(field);
+        lastField = field;
+        field     = fieldlist->next(field);
       } else {
-        Note("There are more field markers than fields;" " cannot process log entry");
+        Note("There are more field markers than fields;"
+             " cannot process log entry '%.*s'. Last field = '%s' printf_str='%s' pos=%d/%d count=%d alt_printf_str='%s'",
+             bytes_written, write_to, lastField == nullptr ? "*" : lastField->symbol(),
+             printf_str == nullptr ? "*NULL*" : printf_str, i, printf_len, markCount,
+             alt_printf_str == nullptr ? "*NULL*" : alt_printf_str);
         bytes_written = 0;
         break;
       }
@@ -645,19 +554,18 @@ LogBuffer::resolve_custom_entry(LogFieldList * fieldlist,
   trailing null, like strlen).
   -------------------------------------------------------------------------*/
 int
-LogBuffer::to_ascii(LogEntryHeader * entry, LogFormatType type,
-                    char *buf, int buf_len, const char *symbol_str, char *printf_str,
+LogBuffer::to_ascii(LogEntryHeader *entry, LogFormatType type, char *buf, int buf_len, const char *symbol_str, char *printf_str,
                     unsigned buffer_version, const char *alt_format)
 {
-  ink_assert(entry != NULL);
+  ink_assert(entry != nullptr);
   ink_assert(type == LOG_FORMAT_CUSTOM || type == LOG_FORMAT_TEXT);
-  ink_assert(buf != NULL);
+  ink_assert(buf != nullptr);
 
-  char *read_from;              // keeps track of where we're reading from entry
-  char *write_to;               // keeps track of where we're writing into buf
+  char *read_from; // keeps track of where we're reading from entry
+  char *write_to;  // keeps track of where we're writing into buf
 
-  read_from = (char *) entry + sizeof(LogEntryHeader);
-  write_to = buf;
+  read_from = (char *)entry + sizeof(LogEntryHeader);
+  write_to  = buf;
 
   if (type == LOG_FORMAT_TEXT) {
     //
@@ -678,7 +586,7 @@ LogBuffer::to_ascii(LogEntryHeader * entry, LogFormatType type,
   //
 
   int i;
-  LogFieldList *fieldlist = NULL;
+  LogFieldList *fieldlist = nullptr;
   bool delete_fieldlist_p = false; // need to free the fieldlist?
 
   for (i = 0; i < fieldlist_cache_entries; i++) {
@@ -692,13 +600,13 @@ LogBuffer::to_ascii(LogEntryHeader * entry, LogFormatType type,
   if (!fieldlist) {
     Debug("log-fieldlist", "Fieldlist for %s not found; creating ...", symbol_str);
     fieldlist = new LogFieldList;
-    ink_assert(fieldlist != NULL);
+    ink_assert(fieldlist != nullptr);
     bool contains_aggregates = false;
     LogFormat::parse_symbol_string(symbol_str, fieldlist, &contains_aggregates);
 
     if (fieldlist_cache_entries < FIELDLIST_CACHE_SIZE) {
       Debug("log-fieldlist", "Fieldlist cached as entry %d", fieldlist_cache_entries);
-      fieldlist_cache[fieldlist_cache_entries].fieldlist = fieldlist;
+      fieldlist_cache[fieldlist_cache_entries].fieldlist  = fieldlist;
       fieldlist_cache[fieldlist_cache_entries].symbol_str = ats_strdup(symbol_str);
       fieldlist_cache_entries++;
     } else {
@@ -706,27 +614,26 @@ LogBuffer::to_ascii(LogEntryHeader * entry, LogFormatType type,
     }
   }
 
-  LogFieldList *alt_fieldlist = NULL;
-  char *alt_printf_str = NULL;
-  char *alt_symbol_str = NULL;
-  bool bad_alt_format = false;
+  LogFieldList *alt_fieldlist = nullptr;
+  char *alt_printf_str        = nullptr;
+  char *alt_symbol_str        = nullptr;
+  bool bad_alt_format         = false;
 
   if (alt_format) {
-    int n_alt_fields = LogFormat::parse_format_string(alt_format,
-                                                      &alt_printf_str, &alt_symbol_str);
+    int n_alt_fields = LogFormat::parse_format_string(alt_format, &alt_printf_str, &alt_symbol_str);
     if (n_alt_fields < 0) {
       Note("Error parsing alternate format string: %s", alt_format);
       bad_alt_format = true;
     }
 
     if (!bad_alt_format) {
-      alt_fieldlist = new LogFieldList;
+      alt_fieldlist      = new LogFieldList;
       bool contains_aggs = false;
-      int n_alt_fields2 = LogFormat::parse_symbol_string(alt_symbol_str,
-                                                         alt_fieldlist, &contains_aggs);
+      int n_alt_fields2  = LogFormat::parse_symbol_string(alt_symbol_str, alt_fieldlist, &contains_aggs);
       if (n_alt_fields2 > 0 && contains_aggs) {
         Note("Alternative formats not allowed to contain aggregates");
-        bad_alt_format = true;;
+        bad_alt_format = true;
+        ;
       }
     }
   }
@@ -735,20 +642,20 @@ LogBuffer::to_ascii(LogEntryHeader * entry, LogFormatType type,
     delete alt_fieldlist;
     ats_free(alt_printf_str);
     ats_free(alt_symbol_str);
-    alt_fieldlist = NULL;
-    alt_printf_str = NULL;
-    alt_symbol_str = NULL;
+    alt_fieldlist  = nullptr;
+    alt_printf_str = nullptr;
+    alt_symbol_str = nullptr;
   }
 
-  int ret = resolve_custom_entry(fieldlist, printf_str,
-                                 read_from, write_to, buf_len, entry->timestamp,
-                                 entry->timestamp_usec, buffer_version,
-                                 alt_fieldlist, alt_printf_str);
+  int ret = resolve_custom_entry(fieldlist, printf_str, read_from, write_to, buf_len, entry->timestamp, entry->timestamp_usec,
+                                 buffer_version, alt_fieldlist, alt_printf_str);
 
   delete alt_fieldlist;
   ats_free(alt_printf_str);
   ats_free(alt_symbol_str);
-  if (delete_fieldlist_p) delete fieldlist;
+  if (delete_fieldlist_p) {
+    delete fieldlist;
+  }
 
   return ret;
 }
@@ -772,7 +679,7 @@ LogBuffer::to_ascii(LogEntryHeader * entry, LogFormatType type,
 LogBufferList::LogBufferList()
 {
   m_size = 0;
-  ink_mutex_init(&m_mutex, "LogBufferList");
+  ink_mutex_init(&m_mutex);
 }
 
 /*-------------------------------------------------------------------------
@@ -782,8 +689,8 @@ LogBufferList::LogBufferList()
 LogBufferList::~LogBufferList()
 {
   LogBuffer *lb;
-  while ((lb = get()) != NULL) {
-      delete lb;
+  while ((lb = get()) != nullptr) {
+    delete lb;
   }
   m_size = 0;
   ink_mutex_destroy(&m_mutex);
@@ -794,12 +701,12 @@ LogBufferList::~LogBufferList()
   -------------------------------------------------------------------------*/
 
 void
-LogBufferList::add(LogBuffer * lb)
+LogBufferList::add(LogBuffer *lb)
 {
-  ink_assert(lb != NULL);
+  ink_assert(lb != nullptr);
 
   ink_mutex_acquire(&m_mutex);
-  m_buffer_list.enqueue (lb);
+  m_buffer_list.enqueue(lb);
   ink_assert(m_size >= 0);
   m_size++;
   ink_mutex_release(&m_mutex);
@@ -815,8 +722,8 @@ LogBufferList::get()
   LogBuffer *lb;
 
   ink_mutex_acquire(&m_mutex);
-  lb =  m_buffer_list.dequeue ();
-  if (lb != NULL) {
+  lb = m_buffer_list.dequeue();
+  if (lb != nullptr) {
     m_size--;
     ink_assert(m_size >= 0);
   }
@@ -830,8 +737,8 @@ LogBufferList::get()
 LogEntryHeader *
 LogBufferIterator::next()
 {
-  LogEntryHeader *ret_val = NULL;
-  LogEntryHeader *entry = (LogEntryHeader *) m_next;
+  LogEntryHeader *ret_val = nullptr;
+  LogEntryHeader *entry   = (LogEntryHeader *)m_next;
 
   if (entry) {
     if (m_iter_entry_count < m_buffer_entry_count) {

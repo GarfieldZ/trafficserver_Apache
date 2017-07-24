@@ -22,95 +22,81 @@
 
  */
 
-#include "libts.h"
-#include "ink_error.h"
-#include "ink_stack_trace.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_error.h"
+#include "ts/ink_stack_trace.h"
 
 #include <syslog.h>
-#include <signal.h>    /* MAGIC_EDITING_TAG */
-
-static int ink_dprintf_level = 0;
-
-/**
-  This routine causes process death. Some signal handler problems got
-  in the way of abort before, so this is an overzealous and somewhat
-  amusing implementation.
-
-*/
-void
-ink_die_die_die(int retval)
-{
-  abort();
-  _exit(retval);
-  exit(retval);
-}
+#include <csignal> /* MAGIC_EDITING_TAG */
 
 /**
   This routine prints/logs an error message given the printf format
-  string in message_format, and the optional arguments.  The program is
-  then terminated with return_code.
+  string in message_format, and the optional arguments.
 
 */
-void
-ink_fatal_va(int return_code, const char * fmt, va_list ap)
+static void
+fatal_va(const char *hdr, const char *fmt, va_list ap)
 {
   char msg[1024];
-  const size_t len = sizeof("FATAL: ") - 1;
+  const size_t len = strlen(hdr);
 
-  strncpy(msg, "FATAL: ", sizeof(msg));
+  strncpy(msg, hdr, sizeof(msg));
   vsnprintf(msg + len, sizeof(msg) - len, fmt, ap);
   msg[sizeof(msg) - 1] = 0;
 
   fprintf(stderr, "%s\n", msg);
   syslog(LOG_CRIT, "%s", msg);
-  ink_stack_trace_dump();
-  ink_die_die_die(return_code);
 }
 
 void
-ink_fatal(int return_code, const char *message_format, ...)
+ink_fatal_va(const char *fmt, va_list ap)
 {
-  va_list ap;
-  va_start(ap, message_format);
-  ink_fatal_va(return_code, message_format, ap);
-  va_end(ap);
+  fatal_va("Fatal: ", fmt, ap);
+  ::exit(70); // 70 corresponds to EX_SOFTWARE in BSD's sysexits. As good a status as any.
 }
 
 void
-ink_fatal_die(const char *message_format, ...)
+ink_fatal(const char *message_format, ...)
 {
   va_list ap;
+
   va_start(ap, message_format);
-  ink_fatal_va(1, message_format, ap);
+  fatal_va("Fatal: ", message_format, ap);
   va_end(ap);
+
+  ::exit(70); // 70 corresponds to EX_SOFTWARE in BSD's sysexits. As good a status as any.
 }
 
-/**
-  This routine prints/logs an error message given the printf format
-  string in message_format, and the optional arguments.  The current
-  errno is also printed.  The program is then terminated with return_code.
-
-*/
 void
-ink_pfatal(int return_code, const char *message_format, ...)
+ink_emergency_va(const char *fmt, va_list ap)
+{
+  fatal_va("Emergency: ", fmt, ap);
+  ::exit(UNRECOVERABLE_EXIT);
+}
+
+void
+ink_emergency(const char *message_format, ...)
 {
   va_list ap;
-  char extended_format[4096], message[4096];
-
-  char *errno_string;
 
   va_start(ap, message_format);
-  errno_string = strerror(errno);
-  snprintf(extended_format, sizeof(extended_format) - 1, "FATAL: %s <last errno = %d (%s)>",
-           message_format, errno, (errno_string == NULL ? "unknown" : errno_string));
-  extended_format[sizeof(extended_format) - 1] = 0;
-  vsnprintf(message, sizeof(message) - 1, extended_format, ap);
-  message[sizeof(message) - 1] = 0;
-  fprintf(stderr, "%s\n", message);
-  syslog(LOG_CRIT, "%s", message);
+  ink_emergency_va(message_format, ap);
+  // Should never reach here since ink_emergency_va calls exit()
   va_end(ap);
-  ink_stack_trace_dump();
-  ink_die_die_die(return_code);
+
+  ::exit(UNRECOVERABLE_EXIT);
+}
+
+void
+ink_abort(const char *message_format, ...)
+{
+  va_list ap;
+
+  va_start(ap, message_format);
+  fatal_va("Fatal: ", message_format, ap);
+  va_end(ap);
+
+  abort();
 }
 
 /**
@@ -148,8 +134,8 @@ ink_pwarning(const char *message_format, ...)
 
   va_start(ap, message_format);
   errno_string = strerror(errno);
-  snprintf(extended_format, sizeof(extended_format) - 1, "WARNING: %s <last errno = %d (%s)>",
-           message_format, errno, (errno_string == NULL ? "unknown" : errno_string));
+  snprintf(extended_format, sizeof(extended_format) - 1, "WARNING: %s <last errno = %d (%s)>", message_format, errno,
+           (errno_string == nullptr ? "unknown" : errno_string));
   extended_format[sizeof(extended_format) - 1] = 0;
   vsnprintf(message, sizeof(message) - 1, extended_format, ap);
   message[sizeof(message) - 1] = 0;
@@ -213,37 +199,4 @@ ink_error(const char *message_format, ...)
   fprintf(stderr, "%s\n", message);
   syslog(LOG_ERR, "%s", message);
   va_end(ap);
-}
-
-/**
-  This routine prints/logs a message given the printf format string in
-  message_format, and the optional arguments.
-
-*/
-void
-ink_dprintf(int debug_level, const char *message_format, ...)
-{
-  char message[4096];
-  va_list ap;
-  if (debug_level <= ink_dprintf_level) {
-    va_start(ap, message_format);
-    vsnprintf(message, sizeof(message) - 1, message_format, ap);
-    message[sizeof(message) - 1] = 0;
-    fprintf(stderr, "%s\n", message);
-    va_end(ap);
-  }
-}
-
-/**
-  Set output level for ink_dprintf() function. For debugging purposes
-  only!
-
-*/
-int
-ink_set_dprintf_level(int debug_level)
-{
-  int old_ink_dprintf_level = ink_dprintf_level;
-  if ((ink_dprintf_level = debug_level) < 0)
-    ink_dprintf_level = 0;
-  return old_ink_dprintf_level;
 }

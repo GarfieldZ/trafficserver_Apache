@@ -17,7 +17,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-SUBDIRS = cluster utils web2 api
+SUBDIRS = utils api
 
 # Decoder ring:
 # 	libmgmt_c.la 	Configuration records (defaults).
@@ -25,19 +25,15 @@ SUBDIRS = cluster utils web2 api
 # 	libmgmt_p.la	libmgmt for Process Manager applications (everything else)
 noinst_LTLIBRARIES = libmgmt_c.la libmgmt_p.la libmgmt_lm.la
 
-AM_CPPFLAGS = \
+AM_CPPFLAGS += \
   $(iocore_include_dirs) \
-  -I$(top_srcdir)/mgmt/api/include \
-  -I$(top_srcdir)/mgmt/cluster \
-  -I$(top_srcdir)/mgmt/utils \
-  -I$(top_srcdir)/mgmt/web2 \
-  -I$(top_srcdir)/proxy/api/ts \
-  -I$(top_srcdir)/proxy \
-  -I$(top_srcdir)/proxy/hdrs \
-  -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
-  -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib
+  -I$(abs_top_srcdir)/mgmt/api/include \
+  -I$(abs_top_srcdir)/mgmt/utils \
+  -I$(abs_top_srcdir)/proxy \
+  -I$(abs_top_srcdir)/proxy/http \
+  -I$(abs_top_srcdir)/proxy/hdrs \
+  -I$(abs_top_srcdir)/lib/records \
+  -I$(abs_top_srcdir)/lib
 
 libmgmt_c_la_SOURCES = \
   RecordsConfig.cc \
@@ -73,9 +69,13 @@ libmgmt_lm_la_SOURCES = \
 
 libmgmt_lm_la_LIBADD = \
   libmgmt_c.la \
-  cluster/libcluster.la \
-  utils/libutils_lm.la
+  $(top_builddir)/mgmt/utils/libutils_lm.la
 
 libmgmt_p_la_LIBADD = \
   libmgmt_c.la \
-  utils/libutils_p.la
+  $(top_builddir)/mgmt/utils/libutils_p.la
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

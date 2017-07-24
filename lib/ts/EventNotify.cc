@@ -27,9 +27,9 @@
   Generic event notify mechanism among threads.
 **************************************************************************/
 
-#include "EventNotify.h"
-#include "ink_hrtime.h"
-#include "ink_defs.h"
+#include "ts/EventNotify.h"
+#include "ts/ink_hrtime.h"
+#include "ts/ink_defs.h"
 
 #ifdef HAVE_EVENTFD
 #include <sys/eventfd.h>
@@ -44,16 +44,9 @@ EventNotify::EventNotify()
   struct epoll_event ev;
 
   m_event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-  if (m_event_fd < 0) {
-    // EFD_NONBLOCK/EFD_CLOEXEC invalid in <= Linux 2.6.27
-    m_event_fd = eventfd(0, 0);
-
-    fcntl(m_event_fd, F_SETFD, FD_CLOEXEC);
-    fcntl(m_event_fd, F_SETFL, O_NONBLOCK);
-  }
   ink_release_assert(m_event_fd != -1);
 
-  ev.events = EPOLLIN;
+  ev.events  = EPOLLIN;
   ev.data.fd = m_event_fd;
 
   m_epoll_fd = epoll_create(1);
@@ -63,12 +56,12 @@ EventNotify::EventNotify()
   ink_release_assert(ret != -1);
 #else
   ink_cond_init(&m_cond);
-  ink_mutex_init(&m_mutex, NULL);
+  ink_mutex_init(&m_mutex);
 #endif
 }
 
 void
-EventNotify::signal(void)
+EventNotify::signal()
 {
 #ifdef HAVE_EVENTFD
   uint64_t value = 1;
@@ -84,7 +77,7 @@ EventNotify::signal(void)
 }
 
 int
-EventNotify::wait(void)
+EventNotify::wait()
 {
 #ifdef HAVE_EVENTFD
   ssize_t nr, nr_fd;
@@ -92,25 +85,26 @@ EventNotify::wait(void)
   struct epoll_event ev;
 
   do {
-    nr_fd = epoll_wait(m_epoll_fd, &ev, 1, -1);
+    nr_fd = epoll_wait(m_epoll_fd, &ev, 1, 500000);
   } while (nr_fd == -1 && errno == EINTR);
 
-  if (nr_fd == -1)
+  if (nr_fd == -1) {
     return errno;
+  }
 
   nr = read(m_event_fd, &value, sizeof(uint64_t));
-  if (nr == sizeof(uint64_t))
+  if (nr == sizeof(uint64_t)) {
     return 0;
-  else
+  } else {
     return errno;
+  }
 #else
   ink_cond_wait(&m_cond, &m_mutex);
   return 0;
 #endif
 }
 
-int
-EventNotify::timedwait(int timeout) // milliseconds
+int EventNotify::timedwait(int timeout) // milliseconds
 {
 #ifdef HAVE_EVENTFD
   ssize_t nr, nr_fd = 0;
@@ -122,23 +116,26 @@ EventNotify::timedwait(int timeout) // milliseconds
   // pthread_cond_timedwait() will return ETIMEDOUT immediately.
   // We should keep compatible with pthread_cond_timedwait() here.
   //
-  if (timeout < 0)
+  if (timeout < 0) {
     return ETIMEDOUT;
+  }
 
   do {
     nr_fd = epoll_wait(m_epoll_fd, &ev, 1, timeout);
   } while (nr_fd == -1 && errno == EINTR);
 
-  if (nr_fd == 0)
+  if (nr_fd == 0) {
     return ETIMEDOUT;
-  else if (nr_fd == -1)
+  } else if (nr_fd == -1) {
     return errno;
+  }
 
   nr = read(m_event_fd, &value, sizeof(uint64_t));
-  if (nr == sizeof(uint64_t))
+  if (nr == sizeof(uint64_t)) {
     return 0;
-  else
+  } else {
     return errno;
+  }
 #else
   ink_timestruc abstime;
 
@@ -148,17 +145,17 @@ EventNotify::timedwait(int timeout) // milliseconds
 }
 
 void
-EventNotify::lock(void)
+EventNotify::lock()
 {
 #ifdef HAVE_EVENTFD
-  // do nothing
+// do nothing
 #else
   ink_mutex_acquire(&m_mutex);
 #endif
 }
 
 bool
-EventNotify::trylock(void)
+EventNotify::trylock()
 {
 #ifdef HAVE_EVENTFD
   return true;
@@ -168,10 +165,10 @@ EventNotify::trylock(void)
 }
 
 void
-EventNotify::unlock(void)
+EventNotify::unlock()
 {
 #ifdef HAVE_EVENTFD
-  // do nothing
+// do nothing
 #else
   ink_mutex_release(&m_mutex);
 #endif

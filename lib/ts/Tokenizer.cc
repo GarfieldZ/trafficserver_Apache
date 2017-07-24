@@ -22,10 +22,10 @@
  */
 
 /***************************************/
-#include "ink_platform.h"
-#include "Tokenizer.h"
-#include "ink_assert.h"
-#include "ink_memory.h"
+#include "ts/ink_platform.h"
+#include "ts/Tokenizer.h"
+#include "ts/ink_assert.h"
+#include "ts/ink_memory.h"
 
 /****************************************************************************
  *
@@ -33,16 +33,16 @@
  *
  *
  *
- ****************************************************************************/        /* MAGIC_EDITING_TAG */
+ ****************************************************************************/ /* MAGIC_EDITING_TAG */
 
 Tokenizer::Tokenizer(const char *StrOfDelimiters)
 {
   int length;
 
-  if (StrOfDelimiters == NULL) {
-    strOfDelimit = NULL;
+  if (StrOfDelimiters == nullptr) {
+    strOfDelimit = nullptr;
   } else {
-    length = (int) (strlen(StrOfDelimiters) + 1);
+    length       = (int)(strlen(StrOfDelimiters) + 1);
     strOfDelimit = new char[length];
     memcpy(strOfDelimit, StrOfDelimiters, length);
   }
@@ -50,29 +50,30 @@ Tokenizer::Tokenizer(const char *StrOfDelimiters)
   memset(&start_node, 0, sizeof(tok_node));
 
   numValidTokens = 0;
-  maxTokens = UINT_MAX;
-  options = 0;
+  maxTokens      = UINT_MAX;
+  options        = 0;
 
-  add_node = &start_node;
-  add_index = 0;
+  add_node   = &start_node;
+  add_index  = 0;
   quoteFound = false;
 }
 
 Tokenizer::~Tokenizer()
 {
-  bool root = true;
-  tok_node *cur = &start_node;;
-  tok_node *next = NULL;
+  bool root     = true;
+  tok_node *cur = &start_node;
+  ;
+  tok_node *next = nullptr;
 
-  if (strOfDelimit != NULL) {
-    delete[]strOfDelimit;
+  if (strOfDelimit != nullptr) {
+    delete[] strOfDelimit;
   }
 
-  while (cur != NULL) {
-
+  while (cur != nullptr) {
     if (options & COPY_TOKS) {
-      for (int i = 0; i < TOK_NODE_ELEMENTS; i++)
-        ats_free(cur->el[i]);
+      for (auto &i : cur->el) {
+        ats_free(i);
+      }
     }
 
     next = cur->next;
@@ -88,7 +89,7 @@ Tokenizer::~Tokenizer()
 unsigned
 Tokenizer::Initialize(const char *str)
 {
-  return Initialize((char *) str, COPY_TOKS);
+  return Initialize((char *)str, COPY_TOKS);
 }
 
 inline int
@@ -100,8 +101,9 @@ Tokenizer::isDelimiter(char c)
     quoteFound = !quoteFound;
   }
 
-  if (quoteFound)
+  if (quoteFound) {
     return 0;
+  }
 
   while (strOfDelimit[i] != '\0') {
     if (c == strOfDelimit[i]) {
@@ -118,9 +120,9 @@ Tokenizer::Initialize(char *str, unsigned opt)
 {
   char *strStart;
   int priorCharWasDelimit = 1;
-  char *tokStart = NULL;
-  unsigned tok_count = 0;
-  bool max_limit_hit = false;
+  char *tokStart          = nullptr;
+  unsigned tok_count      = 0;
+  bool max_limit_hit      = false;
 
   // We can't depend on ReUse() being called so just do it
   //   if the object needs it
@@ -138,14 +140,13 @@ Tokenizer::Initialize(char *str, unsigned opt)
   // Make sure that both options are not set
   ink_assert(!((opt & COPY_TOKS) && (opt & SHARE_TOKS)));
 
-  str = strStart;
+  str                 = strStart;
   priorCharWasDelimit = 1;
 
   tok_count = 0;
-  tokStart = str;
+  tokStart  = str;
 
   while (*str != '\0') {
-
     // Check to see if we've run to maxToken limit
     if (tok_count + 1 == maxTokens) {
       max_limit_hit = true;
@@ -162,9 +163,9 @@ Tokenizer::Initialize(char *str, unsigned opt)
     //          to skip past repeated delimiters
     if (options & ALLOW_EMPTY_TOKS) {
       if (isDelimiter(*str)) {
-        addToken(tokStart, (int) (str - tokStart));
+        addToken(tokStart, (int)(str - tokStart));
         tok_count++;
-        tokStart = str + 1;
+        tokStart            = str + 1;
         priorCharWasDelimit = 1;
       } else {
         priorCharWasDelimit = 0;
@@ -174,7 +175,7 @@ Tokenizer::Initialize(char *str, unsigned opt)
       if (isDelimiter(*str)) {
         if (priorCharWasDelimit == 0) {
           // This is a word end, so add it
-          addToken(tokStart, (int) (str - tokStart));
+          addToken(tokStart, (int)(str - tokStart));
           tok_count++;
         }
         priorCharWasDelimit = 1;
@@ -193,19 +194,20 @@ Tokenizer::Initialize(char *str, unsigned opt)
 
   // Check to see if we stoped due to a maxToken limit
   if (max_limit_hit == true) {
-
     if (options & ALLOW_EMPTY_TOKS) {
-
       // Go till either we hit a delimiter or we've
       //   come to the end of the string, then
       //   set for copying
-      for (; *str != '\0' && !isDelimiter(*str); str++);
+      for (; *str != '\0' && !isDelimiter(*str); str++) {
+        ;
+      }
       priorCharWasDelimit = 0;
 
     } else {
-
       // First, skip the delimiters
-      for (; *str != '\0' && isDelimiter(*str); str++);
+      for (; *str != '\0' && isDelimiter(*str); str++) {
+        ;
+      }
 
       // If there are only delimiters remaining, bail and set
       //   so that we do not add the empty token
@@ -213,14 +215,18 @@ Tokenizer::Initialize(char *str, unsigned opt)
         priorCharWasDelimit = 1;
       } else {
         // There is stuff to copy for the last token
-        tokStart = str;
+        tokStart            = str;
         priorCharWasDelimit = 0;
 
         // Advance until the end of the string
-        for (; *str != '\0'; str++);
+        for (; *str != '\0'; str++) {
+          ;
+        }
 
         // Now back off all trailing delimiters
-        for (; isDelimiter(*(str - 1)); str--);
+        for (; isDelimiter(*(str - 1)); str--) {
+          ;
+        }
       }
     }
   }
@@ -230,7 +236,7 @@ Tokenizer::Initialize(char *str, unsigned opt)
   //  only have gotten it if the string ended with a delimiter
   if (priorCharWasDelimit == 0) {
     // We did not get it
-    addToken(tokStart, (int) (str - tokStart));
+    addToken(tokStart, (int)(str - tokStart));
     tok_count++;
   }
 
@@ -238,14 +244,13 @@ Tokenizer::Initialize(char *str, unsigned opt)
   return tok_count;
 }
 
-
 void
 Tokenizer::addToken(char *startAddr, int length)
 {
   char *add_ptr;
   if (options & SHARE_TOKS) {
     startAddr[length] = '\0';
-    add_ptr = startAddr;
+    add_ptr           = startAddr;
   } else {
     add_ptr = (char *)ats_malloc(length + 1);
     memcpy(add_ptr, startAddr, length);
@@ -261,28 +266,26 @@ Tokenizer::addToken(char *startAddr, int length)
   //   to point to next tok_node, creating one
   //   if there is not a next one
   if (add_index >= TOK_NODE_ELEMENTS) {
-    if (add_node->next == NULL) {
+    if (add_node->next == nullptr) {
       add_node->next = (tok_node *)ats_malloc(sizeof(tok_node));
       memset(add_node->next, 0, sizeof(tok_node));
     }
-    add_node = add_node->next;
+    add_node  = add_node->next;
     add_index = 0;
   }
 }
 
-
-const char *
-Tokenizer::operator[] (unsigned index) const
+const char *Tokenizer::operator[](unsigned index) const
 {
-  const tok_node * cur_node = &start_node;
-  unsigned cur_start = 0;
+  const tok_node *cur_node = &start_node;
+  unsigned cur_start       = 0;
 
   if (index >= numValidTokens) {
-    return NULL;
+    return nullptr;
   } else {
     while (cur_start + TOK_NODE_ELEMENTS <= index) {
       cur_node = cur_node->next;
-      ink_assert(cur_node != NULL);
+      ink_assert(cur_node != nullptr);
       cur_start += TOK_NODE_ELEMENTS;
     }
     return cur_node->el[index % TOK_NODE_ELEMENTS];
@@ -296,50 +299,48 @@ Tokenizer::count() const
 }
 
 const char *
-Tokenizer::iterFirst(tok_iter_state * state)
+Tokenizer::iterFirst(tok_iter_state *state)
 {
-  state->node = &start_node;
+  state->node  = &start_node;
   state->index = -1;
   return iterNext(state);
 }
 
 const char *
-Tokenizer::iterNext(tok_iter_state * state)
+Tokenizer::iterNext(tok_iter_state *state)
 {
-  tok_node *node = state->node;;
+  tok_node *node = state->node;
+  ;
   int index = state->index;
 
   index++;
   if (index >= TOK_NODE_ELEMENTS) {
     node = node->next;
-    if (node == NULL) {
-      return NULL;
+    if (node == nullptr) {
+      return nullptr;
     } else {
       index = 0;
     }
   }
 
-  if (node->el[index] != NULL) {
-    state->node = node;
+  if (node->el[index] != nullptr) {
+    state->node  = node;
     state->index = index;
     return node->el[index];
   } else {
-    return NULL;
+    return nullptr;
   }
 }
-
-
 
 void
 Tokenizer::Print()
 {
   tok_node *cur_node = &start_node;
-  int node_index = 0;
-  int count = 0;
+  int node_index     = 0;
+  int count          = 0;
 
-  while (cur_node != NULL) {
-
-    if (cur_node->el[node_index] != NULL) {
+  while (cur_node != nullptr) {
+    if (cur_node->el[node_index] != nullptr) {
       printf("Token %d : |%s|\n", count, cur_node->el[node_index]);
       count++;
     } else {
@@ -348,7 +349,7 @@ Tokenizer::Print()
 
     node_index++;
     if (node_index >= TOK_NODE_ELEMENTS) {
-      cur_node = cur_node->next;
+      cur_node   = cur_node->next;
       node_index = 0;
     }
   }
@@ -359,39 +360,34 @@ Tokenizer::ReUse()
 {
   tok_node *cur_node = &start_node;
 
-  while (cur_node != NULL) {
+  while (cur_node != nullptr) {
     if (options & COPY_TOKS) {
-      for (int i = 0; i < TOK_NODE_ELEMENTS; i++)
-        ats_free(cur_node->el[i]);
+      for (auto &i : cur_node->el) {
+        ats_free(i);
+      }
     }
     memset(cur_node->el, 0, sizeof(char *) * TOK_NODE_ELEMENTS);
     cur_node = cur_node->next;
   }
 
   numValidTokens = 0;
-  add_node = &start_node;
-  add_index = 0;
+  add_node       = &start_node;
+  add_index      = 0;
 }
 
 #if TS_HAS_TESTS
-#include "TestBox.h"
+#include "ts/TestBox.h"
 
-REGRESSION_TEST(libts_Tokenizer) (RegressionTest * test, int /* atype ATS_UNUSED */, int *pstatus)
+REGRESSION_TEST(libts_Tokenizer)(RegressionTest *test, int /* atype ATS_UNUSED */, int *pstatus)
 {
   TestBox box(test, pstatus);
   box = REGRESSION_TEST_PASSED;
 
   Tokenizer remap(" \t");
 
-  const char * line = "map https://abc.com https://abc.com @plugin=conf_remap.so @pparam=proxy.config.abc='ABC DEF'";
+  const char *line = "map https://abc.com https://abc.com @plugin=conf_remap.so @pparam=proxy.config.abc='ABC DEF'";
 
-  const char * toks[] = {
-    "map",
-    "https://abc.com",
-    "https://abc.com",
-    "@plugin=conf_remap.so",
-    "@pparam=proxy.config.abc='ABC DEF'"
-  };
+  const char *toks[] = {"map", "https://abc.com", "https://abc.com", "@plugin=conf_remap.so", "@pparam=proxy.config.abc='ABC DEF'"};
 
   unsigned count = remap.Initialize(const_cast<char *>(line), (COPY_TOKS | ALLOW_SPACES));
 
@@ -399,8 +395,7 @@ REGRESSION_TEST(libts_Tokenizer) (RegressionTest * test, int /* atype ATS_UNUSED
   box.check(count == remap.count(), "parsed %u tokens, but now we have %u tokens", count, remap.count());
 
   for (unsigned i = 0; i < count; ++i) {
-    box.check(strcmp(remap[i], toks[i]) == 0, "expected token %u to be '%s' but found '%s'",
-        count, toks[i], remap[i]);
+    box.check(strcmp(remap[i], toks[i]) == 0, "expected token %u to be '%s' but found '%s'", count, toks[i], remap[i]);
   }
 }
 #endif

@@ -17,9 +17,17 @@
 
 SUBDIRS = \
   traffic_cop \
+  traffic_ctl \
   traffic_crashlog \
   traffic_layout \
-  traffic_line \
   traffic_manager \
   traffic_top \
   traffic_via
+
+TESTS = $(check_PROGRAMS)
+
+if BUILD_WCCP
+
+SUBDIRS += traffic_wccp
+
+endif

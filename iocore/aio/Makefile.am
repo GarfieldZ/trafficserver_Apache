@@ -16,12 +16,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-AM_CPPFLAGS = \
-  -I$(top_srcdir)/iocore/eventsystem \
-  -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib \
-  -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts
+AM_CPPFLAGS += \
+  -I$(abs_top_srcdir)/iocore/eventsystem \
+  -I$(abs_top_srcdir)/lib \
+  -I$(abs_top_srcdir)/lib/records
 
 TESTS = test_AIO.sample
 
@@ -34,19 +32,23 @@ libinkaio_a_SOURCES = \
   Inline.cc \
   P_AIO.h
 
+test_AIO_LDFLAGS = \
+  @AM_LDFLAGS@ \
+  @OPENSSL_LDFLAGS@
+
 test_AIO_SOURCES = \
   test_AIO.cc
 
-test_AIO_CXXFLAGS = \
+test_AIO_CPPFLAGS = \
+  $(AM_CPPFLAGS) \
   $(iocore_include_dirs) \
-  -I$(top_srcdir)/proxy/api/ts \
-  -I$(top_srcdir)/proxy/api \
-  -I$(top_srcdir)/proxy \
-  -I$(top_srcdir)/proxy/hdrs \
-  -I$(top_srcdir)/proxy/http \
-  -I$(top_srcdir)/proxy/logging \
-  -I$(top_srcdir)/mgmt \
-  -I$(top_srcdir)/mgmt/utils
+  -I$(abs_top_srcdir)/proxy \
+  -I$(abs_top_srcdir)/proxy/hdrs \
+  -I$(abs_top_srcdir)/proxy/http \
+  -I$(abs_top_srcdir)/proxy/logging \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/utils \
+  @OPENSSL_INCLUDES@
 
 test_AIO_LDADD = \
   libinkaio.a \
@@ -56,3 +58,8 @@ test_AIO_LDADD = \
   $(top_builddir)/lib/ts/libtsutil.la \
   $(top_builddir)/proxy/shared/libUglyLogStubs.a \
   @LIBTCL@ @HWLOC_LIBS@
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

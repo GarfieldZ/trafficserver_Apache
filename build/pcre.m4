@@ -83,8 +83,6 @@ else
   fi
 fi
 
-pcreh=0
-pcre_pcreh=0
 if test "$enable_pcre" != "no"; then
   saved_ldflags=$LDFLAGS
   saved_cppflags=$CPPFLAGS
@@ -93,9 +91,9 @@ if test "$enable_pcre" != "no"; then
   if test "$pcre_base_dir" != "/usr"; then
     TS_ADDTO(CPPFLAGS, [-I${pcre_include}])
     TS_ADDTO(LDFLAGS, [-L${pcre_ldflags}])
-    TS_ADDTO(LIBTOOL_LINK_FLAGS, [-R${pcre_ldflags}])
+    TS_ADDTO_RPATH(${pcre_ldflags})
   fi
-  AC_SEARCH_LIBS([pcre_exec], [pcre], [pcre_have_libs=1])
+  AC_CHECK_LIB([pcre], [pcre_exec], [pcre_have_libs=1])
   if test "$pcre_have_libs" != "0"; then
     AC_CHECK_HEADERS(pcre.h, [pcre_have_headers=1])
     AC_CHECK_HEADERS(pcre/pcre.h, [pcre_have_headers=1])
@@ -109,6 +107,4 @@ if test "$enable_pcre" != "no"; then
     LDFLAGS=$saved_ldflags
   fi
 fi
-AC_SUBST(pcreh)
-AC_SUBST(pcre_pcreh)
 ])

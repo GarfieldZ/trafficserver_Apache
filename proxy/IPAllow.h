@@ -63,26 +63,37 @@ struct AclRecord {
 
   /// Default constructor.
   /// Present only to make Vec<> happy, do not use.
-  AclRecord() : _method_mask(0), _src_line(0), _deny_nonstandard_methods(false) { }
-
-  AclRecord(uint32_t method_mask) : _method_mask(method_mask), _src_line(0),
-                                    _deny_nonstandard_methods(false) { }
-
+  AclRecord() : _method_mask(0), _src_line(0), _deny_nonstandard_methods(false) {}
+  AclRecord(uint32_t method_mask) : _method_mask(method_mask), _src_line(0), _deny_nonstandard_methods(false) {}
   AclRecord(uint32_t method_mask, int ln, const MethodSet &nonstandard_methods, bool deny_nonstandard_methods)
-    : _method_mask(method_mask), _src_line(ln), _nonstandard_methods(nonstandard_methods),
-      _deny_nonstandard_methods(deny_nonstandard_methods) { }
+    : _method_mask(method_mask),
+      _src_line(ln),
+      _nonstandard_methods(nonstandard_methods),
+      _deny_nonstandard_methods(deny_nonstandard_methods)
+  {
+  }
 
-  static uint32_t MethodIdxToMask(int wksidx) { return 1 << (wksidx - HTTP_WKSIDX_CONNECT); }
+  static uint32_t
+  MethodIdxToMask(int wksidx)
+  {
+    return 1 << (wksidx - HTTP_WKSIDX_CONNECT);
+  }
 
-  bool isEmpty() const {
+  bool
+  isEmpty() const
+  {
     return (_method_mask == 0) && _nonstandard_methods.empty();
   }
 
-  bool isMethodAllowed(int method_wksidx) const {
+  bool
+  isMethodAllowed(int method_wksidx) const
+  {
     return _method_mask & MethodIdxToMask(method_wksidx);
   }
 
-  bool isNonstandardMethodAllowed(const std::string &method_str) const {
+  bool
+  isNonstandardMethodAllowed(const std::string &method_str) const
+  {
     if (_method_mask == ALL_METHOD_MASK) {
       return true;
     }
@@ -95,27 +106,51 @@ struct AclRecord {
  */
 class IpAllow : public ConfigInfo
 {
-  friend int main(int, char**);
   friend struct IpAllowUpdate;
 
 public:
   typedef IpAllow self; ///< Self reference type.
+  // indicator for whether we should be checking the acl record for src ip or dest ip
+  enum match_key_t { SRC_ADDR, DEST_ADDR };
 
   IpAllow(const char *config_var, const char *name, const char *action_val);
-   ~IpAllow();
+  ~IpAllow();
   void Print();
-  AclRecord *match(IpEndpoint const* ip) const;
-  AclRecord *match(sockaddr const* ip) const;
+  AclRecord *match(IpEndpoint const *ip, match_key_t key) const;
+  AclRecord *match(sockaddr const *ip, match_key_t key) const;
 
   static void startup();
   static void reconfigure();
   /// @return The global instance.
-  static IpAllow * acquire();
-  static void release(IpAllow * params);
+  static IpAllow *acquire();
+  static void release(IpAllow *params);
 
   /// @return A mask that permits all methods.
-  static const AclRecord *AllMethodAcl() {
+  static const AclRecord *
+  AllMethodAcl()
+  {
     return &ALL_METHOD_ACL;
+  }
+
+  /* @return The previous accept check state
+   * This is a global variable that is independent of
+   * the ip_allow configuration
+   */
+  static bool
+  enableAcceptCheck(bool state)
+  {
+    bool temp      = accept_check_p;
+    accept_check_p = state;
+    return temp;
+  }
+  /* @return The current accept check state
+   * This is a global variable that is independent of
+   * the ip_allow configuration
+   */
+  static bool
+  isAcceptCheckEnabled()
+  {
+    return accept_check_p;
   }
 
   typedef ConfigProcessor::scoped_config<IpAllow, IpAllow> scoped_config;
@@ -123,28 +158,33 @@ public:
 private:
   static int configid;
   static const AclRecord ALL_METHOD_ACL;
+  static bool accept_check_p;
 
+  void PrintMap(IpMap *map);
   int BuildTable();
 
   char config_file_path[PATH_NAME_MAX];
   const char *module_name;
   const char *action;
-  IpMap _map;
-  Vec<AclRecord> _acls;
+  IpMap _src_map;
+  IpMap _dest_map;
+  Vec<AclRecord> _src_acls;
+  Vec<AclRecord> _dest_acls;
 };
 
 inline AclRecord *
-IpAllow::match(IpEndpoint const* ip) const {
-  return this->match(&ip->sa);
+IpAllow::match(IpEndpoint const *ip, match_key_t key) const
+{
+  return this->match(&ip->sa, key);
 }
 
 inline AclRecord *
-IpAllow::match(sockaddr const* ip) const {
-  void *raw;
-  if (_map.contains(ip, &raw)) {
-    return static_cast<AclRecord*>(raw);
-  }
-  return NULL;
+IpAllow::match(sockaddr const *ip, match_key_t key) const
+{
+  void *raw        = nullptr;
+  const IpMap &map = (key == SRC_ADDR) ? _src_map : _dest_map;
+  map.contains(ip, &raw);
+  return static_cast<AclRecord *>(raw);
 }
 
 #endif

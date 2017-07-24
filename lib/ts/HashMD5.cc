@@ -19,51 +19,63 @@
   limitations under the License.
  */
 
-#include "HashMD5.h"
+#include "ts/HashMD5.h"
+#include "ts/ink_assert.h"
 
-ATSHashMD5::ATSHashMD5(void) {
-    EVP_DigestInit(&ctx, EVP_md5());
-    md_len = 0;
-    finalized = false;
+ATSHashMD5::ATSHashMD5() : md_len(0), finalized(false)
+{
+  ctx     = EVP_MD_CTX_new();
+  int ret = EVP_DigestInit_ex(ctx, EVP_md5(), nullptr);
+  ink_assert(ret == 1);
 }
 
 void
-ATSHashMD5::update(const void *data, size_t len) {
-    if (!finalized) {
-        EVP_DigestUpdate(&ctx, data, len);
-    }
+ATSHashMD5::update(const void *data, size_t len)
+{
+  if (!finalized) {
+    int ret = EVP_DigestUpdate(ctx, data, len);
+    ink_assert(ret == 1);
+  }
 }
 
 void
-ATSHashMD5::final(void) {
-    if (!finalized) {
-        EVP_DigestFinal_ex(&ctx, md_value, &md_len);
-        finalized = true;
-    }
+ATSHashMD5::final()
+{
+  if (!finalized) {
+    int ret = EVP_DigestFinal_ex(ctx, md_value, &md_len);
+    ink_assert(ret == 1);
+    finalized = true;
+  }
 }
 
 const void *
-ATSHashMD5::get(void) const {
-    if (finalized) {
-        return (void *) md_value;
-    } else {
-        return NULL;
-    }
+ATSHashMD5::get() const
+{
+  if (finalized) {
+    return (void *)md_value;
+  } else {
+    return nullptr;
+  }
 }
 
 size_t
-ATSHashMD5::size(void) const {
-    return EVP_MD_CTX_size(&ctx);
+ATSHashMD5::size() const
+{
+  return EVP_MD_CTX_size(ctx);
 }
 
 void
-ATSHashMD5::clear(void) {
-    EVP_MD_CTX_cleanup(&ctx);
-    EVP_DigestInit(&ctx, EVP_md5());
-    md_len = 0;
-    finalized = false;
+ATSHashMD5::clear()
+{
+  int ret = EVP_MD_CTX_reset(ctx);
+  ink_assert(ret == 1);
+  ret = EVP_DigestInit_ex(ctx, EVP_md5(), nullptr);
+  ink_assert(ret == 1);
+  md_len    = 0;
+  finalized = false;
 }
 
-ATSHashMD5::~ATSHashMD5() {
-    EVP_MD_CTX_cleanup(&ctx);
+ATSHashMD5::~ATSHashMD5()
+{
+  EVP_MD_CTX_free(ctx);
 }

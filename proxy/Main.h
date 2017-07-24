@@ -21,13 +21,13 @@
   limitations under the License.
  */
 #ifndef _Main_h_
-#define	_Main_h_
+#define _Main_h_
 
+#include "ts/ink_platform.h"
+#include "ts/ink_apidefs.h"
 #include <ts/ink_defs.h>
-#include "libts.h"
-#include "Regression.h"
-#include "I_Version.h"
-
+#include "ts/Regression.h"
+#include "ts/I_Version.h"
 
 //
 // Constants
@@ -35,10 +35,12 @@
 #define ET_CACHE ET_CALL
 
 // TODO: consolidate location of these defaults
-#define DEFAULT_ROOT_DIRECTORY            PREFIX
-#define DEFAULT_LOCAL_STATE_DIRECTORY     "var/trafficserver"
-#define DEFAULT_SYSTEM_CONFIG_DIRECTORY   "etc/trafficserver"
-#define DEFAULT_LOG_DIRECTORY             "var/log/trafficserver"
+#define DEFAULT_ROOT_DIRECTORY PREFIX
+#define DEFAULT_LOCAL_STATE_DIRECTORY "var/trafficserver"
+#define DEFAULT_SYSTEM_CONFIG_DIRECTORY "etc/trafficserver"
+#define DEFAULT_LOG_DIRECTORY "var/log/trafficserver"
+#define DEFAULT_BIND_STDOUT ""
+#define DEFAULT_BIND_STDERR ""
 
 //
 // Global Data
@@ -51,13 +53,10 @@ extern int auto_clear_hostdb_flag;
 extern int auto_clear_cache_flag;
 extern int fds_limit;
 extern int debug_level;
-extern char cluster_host[MAXDNAME + 1];
-extern int cluster_port_number;
 
 extern int remote_management_flag;
 
 inkcoreapi extern int qt_accept_file_descriptor;
-inkcoreapi extern int cache_clustering_enabled;
 
 // Debugging Configuration
 extern char debug_host[MAXDNAME + 1];
@@ -79,6 +78,6 @@ maintainance_mode()
 extern AppVersionInfo appVersionInfo;
 
 void crash_logger_init();
-void crash_logger_invoke(int signo, siginfo_t * info, void * ctx);
+void crash_logger_invoke(int signo, siginfo_t *info, void *ctx);
 
 #endif /* _Main_h_ */

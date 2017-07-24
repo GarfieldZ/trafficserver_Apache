@@ -26,10 +26,9 @@
 
 
  ***************************************************************************/
-#include "libts.h"
-
-
-#include "Error.h"
+#include "ts/ink_platform.h"
+#include "ts/CryptoHash.h"
+#include "ts/INK_MD5.h"
 #include "P_EventSystem.h"
 #include "LogUtils.h"
 #include "LogField.h"
@@ -40,19 +39,22 @@
 #include "ts/TestBox.h"
 
 static bool
-should_roll_on_time(Log::RollingEnabledValues roll) {
+should_roll_on_time(Log::RollingEnabledValues roll)
+{
   return roll == Log::ROLL_ON_TIME_ONLY || roll == Log::ROLL_ON_TIME_OR_SIZE;
 }
 
 static bool
-should_roll_on_size(Log::RollingEnabledValues roll) {
+should_roll_on_size(Log::RollingEnabledValues roll)
+{
   return roll == Log::ROLL_ON_SIZE_ONLY || roll == Log::ROLL_ON_TIME_OR_SIZE;
 }
 
 size_t
-LogBufferManager::preproc_buffers(LogBufferSink *sink) {
+LogBufferManager::preproc_buffers(LogBufferSink *sink)
+{
   SList(LogBuffer, write_link) q(write_list.popall()), new_q;
-  LogBuffer *b = NULL;
+  LogBuffer *b = nullptr;
   while ((b = q.pop())) {
     if (b->m_references || b->m_state.s.num_writers) {
       // Still has outstanding references.
@@ -60,8 +62,7 @@ LogBufferManager::preproc_buffers(LogBufferSink *sink) {
     } else if (_num_flush_buffers > FLUSH_ARRAY_SIZE) {
       ink_atomic_increment(&_num_flush_buffers, -1);
       Warning("Dropping log buffer, can't keep up.");
-      RecIncrRawStat(log_rsb, this_thread()->mutex->thread_holding,
-                     log_stat_bytes_lost_before_preproc_stat,
+      RecIncrRawStat(log_rsb, this_thread()->mutex->thread_holding, log_stat_bytes_lost_before_preproc_stat,
                      b->header()->byte_count);
       delete b;
     } else {
@@ -85,95 +86,94 @@ LogBufferManager::preproc_buffers(LogBufferSink *sink) {
   LogObject
   -------------------------------------------------------------------------*/
 
-LogObject::LogObject(const LogFormat *format, const char *log_dir,
-                     const char *basename, LogFileFormat file_format,
-                     const char *header, Log::RollingEnabledValues rolling_enabled,
-                     int flush_threads, int rolling_interval_sec,
-                     int rolling_offset_hr, int rolling_size_mb,
-                     bool auto_created):
-      m_auto_created(auto_created),
-      m_alt_filename (NULL),
-      m_flags (0),
-      m_signature (0),
-      m_flush_threads (flush_threads),
-      m_rolling_interval_sec (rolling_interval_sec),
-      m_rolling_offset_hr (rolling_offset_hr),
-      m_rolling_size_mb (rolling_size_mb),
-      m_last_roll_time(0),
-      m_buffer_manager_idx(0)
+LogObject::LogObject(const LogFormat *format, const char *log_dir, const char *basename, LogFileFormat file_format,
+                     const char *header, Log::RollingEnabledValues rolling_enabled, int flush_threads, int rolling_interval_sec,
+                     int rolling_offset_hr, int rolling_size_mb, bool auto_created)
+  : m_auto_created(auto_created),
+    m_alt_filename(nullptr),
+    m_flags(0),
+    m_signature(0),
+    m_flush_threads(flush_threads),
+    m_rolling_interval_sec(rolling_interval_sec),
+    m_rolling_offset_hr(rolling_offset_hr),
+    m_rolling_size_mb(rolling_size_mb),
+    m_last_roll_time(0),
+    m_buffer_manager_idx(0)
 {
-    ink_assert (format != NULL);
-    m_format = new LogFormat(*format);
-    m_buffer_manager = new LogBufferManager[m_flush_threads];
+  ink_release_assert(format);
+  m_format         = new LogFormat(*format);
+  m_buffer_manager = new LogBufferManager[m_flush_threads];
 
-    if (file_format == LOG_FILE_BINARY) {
-        m_flags |= BINARY;
-    } else if (file_format == LOG_FILE_PIPE) {
-        m_flags |= WRITES_TO_PIPE;
-    }
+  if (file_format == LOG_FILE_BINARY) {
+    m_flags |= BINARY;
+  } else if (file_format == LOG_FILE_PIPE) {
+    m_flags |= WRITES_TO_PIPE;
+  }
 
-    generate_filenames(log_dir, basename, file_format);
+  generate_filenames(log_dir, basename, file_format);
 
-    // compute_signature is a static function
-    m_signature = compute_signature(m_format, m_basename, m_flags);
+  // compute_signature is a static function
+  m_signature = compute_signature(m_format, m_basename, m_flags);
 
-    // by default, create a LogFile for this object, if a loghost is
-    // later specified, then we will delete the LogFile object
-    //
-    m_logFile = new LogFile(m_filename, header, file_format,
-                            m_signature,
-                            Log::config->ascii_buffer_size,
-                            Log::config->max_line_size);
+  // by default, create a LogFile for this object, if a loghost is
+  // later specified, then we will delete the LogFile object
+  //
+  m_logFile = new LogFile(m_filename, header, file_format, m_signature, Log::config->ascii_buffer_size, Log::config->max_line_size);
 
-    LogBuffer *b = new LogBuffer (this, Log::config->log_buffer_size);
-    ink_assert(b);
-    SET_FREELIST_POINTER_VERSION(m_log_buffer, b, 0);
+  LogBuffer *b = new LogBuffer(this, Log::config->log_buffer_size);
+  ink_assert(b);
+  SET_FREELIST_POINTER_VERSION(m_log_buffer, b, 0);
 
-    _setup_rolling(rolling_enabled, rolling_interval_sec, rolling_offset_hr, rolling_size_mb);
+  _setup_rolling(rolling_enabled, rolling_interval_sec, rolling_offset_hr, rolling_size_mb);
 
-    Debug("log-config", "exiting LogObject constructor, filename=%s this=%p",
-          m_filename, this);
+  Debug("log-config", "exiting LogObject constructor, filename=%s this=%p", m_filename, this);
 }
 
-LogObject::LogObject(LogObject& rhs)
-  : m_basename(ats_strdup(rhs.m_basename)),
+LogObject::LogObject(LogObject &rhs)
+  : RefCountObj(rhs),
+    m_auto_created(rhs.m_auto_created),
+    m_basename(ats_strdup(rhs.m_basename)),
     m_filename(ats_strdup(rhs.m_filename)),
     m_alt_filename(ats_strdup(rhs.m_alt_filename)),
     m_flags(rhs.m_flags),
     m_signature(rhs.m_signature),
+    m_rolling_enabled(rhs.m_rolling_enabled),
     m_flush_threads(rhs.m_flush_threads),
     m_rolling_interval_sec(rhs.m_rolling_interval_sec),
-    m_last_roll_time(rhs.m_last_roll_time)
+    m_rolling_offset_hr(rhs.m_rolling_offset_hr),
+    m_rolling_size_mb(rhs.m_rolling_size_mb),
+    m_last_roll_time(rhs.m_last_roll_time),
+    m_buffer_manager_idx(rhs.m_buffer_manager_idx)
+
 {
-    m_format = new LogFormat(*(rhs.m_format));
-    m_buffer_manager = new LogBufferManager[m_flush_threads];
+  m_format         = new LogFormat(*(rhs.m_format));
+  m_buffer_manager = new LogBufferManager[m_flush_threads];
 
-    if (rhs.m_logFile) {
-        m_logFile = new LogFile(*(rhs.m_logFile));
-    } else {
-        m_logFile = NULL;
-    }
+  if (rhs.m_logFile) {
+    m_logFile = new LogFile(*(rhs.m_logFile));
+  } else {
+    m_logFile = nullptr;
+  }
 
-    LogFilter *filter;
-    for (filter = rhs.m_filter_list.first(); filter;
-            filter = rhs.m_filter_list.next (filter)) {
-        add_filter (filter);
-    }
+  LogFilter *filter;
+  for (filter = rhs.m_filter_list.first(); filter; filter = rhs.m_filter_list.next(filter)) {
+    add_filter(filter);
+  }
 
-    LogHost *host;
-    for (host = rhs.m_host_list.first(); host;
-            host = rhs.m_host_list.next (host)) {
-        add_loghost (host);
-    }
+  LogHost *host;
+  for (host = rhs.m_host_list.first(); host; host = rhs.m_host_list.next(host)) {
+    add_loghost(host);
+  }
 
-    // copy gets a fresh log buffer
-    //
-    LogBuffer *b = new LogBuffer (this, Log::config->log_buffer_size);
-    ink_assert(b);
-    SET_FREELIST_POINTER_VERSION(m_log_buffer, b, 0);
+  // copy gets a fresh log buffer
+  //
+  LogBuffer *b = new LogBuffer(this, Log::config->log_buffer_size);
+  ink_assert(b);
+  SET_FREELIST_POINTER_VERSION(m_log_buffer, b, 0);
 
-    Debug("log-config", "exiting LogObject copy constructor, "
-          "filename=%s this=%p", m_filename, this);
+  Debug("log-config", "exiting LogObject copy constructor, "
+                      "filename=%s this=%p",
+        m_filename, this);
 }
 
 LogObject::~LogObject()
@@ -193,7 +193,7 @@ LogObject::~LogObject()
   ats_free(m_alt_filename);
   delete m_format;
   delete[] m_buffer_manager;
-  delete (LogBuffer*)FREELIST_POINTER(m_log_buffer);
+  delete (LogBuffer *)FREELIST_POINTER(m_log_buffer);
 }
 
 //-----------------------------------------------------------------------------
@@ -223,22 +223,22 @@ LogObject::generate_filenames(const char *log_dir, const char *basename, LogFile
   }
   if (i == len - 1) {
     --len;
-  };                            // remove dot at end of name
+  }; // remove dot at end of name
 
-  const char *ext = 0;
-  int ext_len = 0;
-  if (i < 0) {                  // no extension, add one
+  const char *ext = nullptr;
+  int ext_len     = 0;
+  if (i < 0) { // no extension, add one
     switch (file_format) {
     case LOG_FILE_ASCII:
-      ext = LOG_FILE_ASCII_OBJECT_FILENAME_EXTENSION;
+      ext     = LOG_FILE_ASCII_OBJECT_FILENAME_EXTENSION;
       ext_len = 4;
       break;
     case LOG_FILE_BINARY:
-      ext = LOG_FILE_BINARY_OBJECT_FILENAME_EXTENSION;
+      ext     = LOG_FILE_BINARY_OBJECT_FILENAME_EXTENSION;
       ext_len = 5;
       break;
     case LOG_FILE_PIPE:
-      ext = LOG_FILE_PIPE_OBJECT_FILENAME_EXTENSION;
+      ext     = LOG_FILE_PIPE_OBJECT_FILENAME_EXTENSION;
       ext_len = 5;
       break;
     default:
@@ -246,9 +246,9 @@ LogObject::generate_filenames(const char *log_dir, const char *basename, LogFile
     }
   }
 
-  int dir_len = (int) strlen(log_dir);
-  int basename_len = len + ext_len + 1; // include null terminator
-  int total_len = dir_len + 1 + basename_len;   // include '/'
+  int dir_len      = (int)strlen(log_dir);
+  int basename_len = len + ext_len + 1;          // include null terminator
+  int total_len    = dir_len + 1 + basename_len; // include '/'
 
   m_filename = (char *)ats_malloc(total_len);
   m_basename = (char *)ats_malloc(basename_len);
@@ -262,11 +262,9 @@ LogObject::generate_filenames(const char *log_dir, const char *basename, LogFile
     memcpy(&m_filename[dir_len + len], ext, ext_len);
     memcpy(&m_basename[len], ext, ext_len);
   }
-  m_filename[total_len - 1] = 0;
+  m_filename[total_len - 1]    = 0;
   m_basename[basename_len - 1] = 0;
 }
-
-
 
 void
 LogObject::rename(char *new_name)
@@ -280,9 +278,8 @@ LogObject::rename(char *new_name)
   m_logFile->change_name(new_name);
 }
 
-
 void
-LogObject::add_filter(LogFilter * filter, bool copy)
+LogObject::add_filter(LogFilter *filter, bool copy)
 {
   if (!filter) {
     return;
@@ -290,22 +287,20 @@ LogObject::add_filter(LogFilter * filter, bool copy)
   m_filter_list.add(filter, copy);
 }
 
-
 void
-LogObject::set_filter_list(const LogFilterList & list, bool copy)
+LogObject::set_filter_list(const LogFilterList &list, bool copy)
 {
   LogFilter *f;
 
   m_filter_list.clear();
-  for (f = list.first(); f != NULL; f = list.next(f)) {
+  for (f = list.first(); f != nullptr; f = list.next(f)) {
     m_filter_list.add(f, copy);
   }
   m_filter_list.set_conjunction(list.does_conjunction());
 }
 
-
 void
-LogObject::add_loghost(LogHost * host, bool copy)
+LogObject::add_loghost(LogHost *host, bool copy)
 {
   if (!host) {
     return;
@@ -317,25 +312,27 @@ LogObject::add_loghost(LogHost * host, bool copy)
   // then clear the intelligent Ptr containing LogFile.
   //
   m_logFile.clear();
-}
 
+  Debug("log", "added log host %p to object %p for target %s:%d", host, this, host->name(), host->port());
+}
 
 // we conpute the object signature from the fieldlist_str and the printf_str
 // of the LogFormat rather than from the format_str because the format_str
 // is not part of a LogBuffer header
 //
-uint64_t LogObject::compute_signature(LogFormat * format, char *filename, unsigned int flags)
+uint64_t
+LogObject::compute_signature(LogFormat *format, char *filename, unsigned int flags)
 {
-  char *fl = format->fieldlist();
-  char *ps = format->printf_str();
+  char *fl           = format->fieldlist();
+  char *ps           = format->printf_str();
   uint64_t signature = 0;
 
   if (fl && ps && filename) {
     int buf_size = strlen(fl) + strlen(ps) + strlen(filename) + 2;
     char *buffer = (char *)ats_malloc(buf_size);
 
-    ink_string_concatenate_strings(buffer, fl, ps, filename, flags & LogObject::BINARY ? "B" :
-                                   (flags & LogObject::WRITES_TO_PIPE ? "P" : "A"), NULL);
+    ink_string_concatenate_strings(buffer, fl, ps, filename,
+                                   flags & LogObject::BINARY ? "B" : (flags & LogObject::WRITES_TO_PIPE ? "P" : "A"), NULL);
 
     CryptoHash hash;
     MD5Context().hash_immediate(hash, buffer, buf_size - 1);
@@ -346,13 +343,13 @@ uint64_t LogObject::compute_signature(LogFormat * format, char *filename, unsign
   return signature;
 }
 
-
 void
-LogObject::display(FILE * fd)
+LogObject::display(FILE *fd)
 {
   fprintf(fd, "++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
-  fprintf(fd, "LogObject [%p]: format = %s (%p)\nbasename = %s\n" "flags = %u\n"
-          "signature = %" PRIu64 "\n",
+  fprintf(fd, "LogObject [%p]: format = %s (%p)\nbasename = %s\n"
+              "flags = %u\n"
+              "signature = %" PRIu64 "\n",
           this, m_format->name(), m_format, m_basename, m_flags, m_signature);
   if (is_collation_client()) {
     m_host_list.display(fd);
@@ -363,60 +360,47 @@ LogObject::display(FILE * fd)
   fprintf(fd, "++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 }
 
-
-void
-LogObject::displayAsXML(FILE * fd, bool extended)
+static head_p
+increment_pointer_version(volatile head_p *dst)
 {
-  if (extended) {
-    // display format and filter objects
-    m_format->displayAsXML(fd);
-    m_filter_list.display_as_XML(fd);
-  }
+  head_p h;
+  head_p new_h;
 
-  fprintf(fd,
-          "<LogObject>\n"
-          "  <Mode        = \"%s\"/>\n"
-          "  <Format      = \"%s\"/>\n"
-          "  <Filename    = \"%s\"/>\n", (m_flags & BINARY ? "binary" : "ascii"), m_format->name(), m_filename);
+  do {
+    INK_QUEUE_LD(h, *dst);
+    SET_FREELIST_POINTER_VERSION(new_h, FREELIST_POINTER(h), FREELIST_VERSION(h) + 1);
+  } while (ink_atomic_cas(&dst->data, h.data, new_h.data) == false);
 
-  LogFilter *filter;
-  for (filter = m_filter_list.first(); filter != NULL; filter = m_filter_list.next(filter)) {
-    fprintf(fd, "  <Filter      = \"%s\"/>\n", filter->name());
-  }
-
-  LogHost *host;
-  for (host = m_host_list.first(); host != NULL; host = m_host_list.next(host)) {
-    fprintf(fd, "  <LogHostName = \"%s\"/>\n", host->name());
-  }
-
-  fprintf(fd, "</LogObject>\n");
+  return h;
 }
 
+static bool
+write_pointer_version(volatile head_p *dst, head_p old_h, void *ptr, head_p::version_type vers)
+{
+  head_p tmp_h;
+
+  SET_FREELIST_POINTER_VERSION(tmp_h, ptr, vers);
+  return ink_atomic_cas(&dst->data, old_h.data, tmp_h.data);
+}
 
 LogBuffer *
-LogObject::_checkout_write(size_t * write_offset, size_t bytes_needed) {
+LogObject::_checkout_write(size_t *write_offset, size_t bytes_needed)
+{
   LogBuffer::LB_ResultCode result_code;
   LogBuffer *buffer;
   LogBuffer *new_buffer;
   bool retry = true;
+  head_p old_h;
 
   do {
     // To avoid a race condition, we keep a count of held references in
     // the pointer itself and add this to m_outstanding_references.
-    head_p h;
-    int result = 0;
-    do {
-      INK_QUEUE_LD(h, m_log_buffer);
-      head_p new_h;
-      SET_FREELIST_POINTER_VERSION(new_h, FREELIST_POINTER(h), FREELIST_VERSION(h) + 1);
-#if TS_HAS_128BIT_CAS
-       result = ink_atomic_cas((__int128_t*) &m_log_buffer.data, h.data, new_h.data);
-#else
-       result = ink_atomic_cas((int64_t *) &m_log_buffer.data, h.data, new_h.data);
-#endif
-    } while (!result);
-    buffer = (LogBuffer*)FREELIST_POINTER(h);
-    result_code = buffer->checkout_write(write_offset, bytes_needed);
+
+    // Increment the version of m_log_buffer, returning the previous version.
+    head_p h = increment_pointer_version(&m_log_buffer);
+
+    buffer           = (LogBuffer *)FREELIST_POINTER(h);
+    result_code      = buffer->checkout_write(write_offset, bytes_needed);
     bool decremented = false;
 
     switch (result_code) {
@@ -433,25 +417,22 @@ LogObject::_checkout_write(size_t * write_offset, size_t bytes_needed) {
 
       // swap the new buffer for the old one
       INK_WRITE_MEMORY_BARRIER;
-      head_p old_h;
+
       do {
         INK_QUEUE_LD(old_h, m_log_buffer);
+        // we may depend on comparing the old pointer to the new pointer to detect buffer swaps
+        // without worrying about pointer collisions because we always allocate a new LogBuffer
+        // before freeing the old one
         if (FREELIST_POINTER(old_h) != FREELIST_POINTER(h)) {
           ink_atomic_increment(&buffer->m_references, -1);
 
-          // another thread should be taking care of creating a new
-          // buffer, so delete new_buffer and try again
+          // another thread is already creating a new buffer,
+          // so delete new_buffer and try again next loop iteration
           delete new_buffer;
           break;
         }
-        head_p tmp_h;
-        SET_FREELIST_POINTER_VERSION(tmp_h, new_buffer, 0);
-#if TS_HAS_128BIT_CAS
-       result = ink_atomic_cas((__int128_t*) &m_log_buffer.data, old_h.data, tmp_h.data);
-#else
-       result = ink_atomic_cas((int64_t *) &m_log_buffer.data, old_h.data, tmp_h.data);
-#endif
-      } while (!result);
+      } while (!write_pointer_version(&m_log_buffer, old_h, new_buffer, 0));
+
       if (FREELIST_POINTER(old_h) == FREELIST_POINTER(h)) {
         ink_atomic_increment(&buffer->m_references, FREELIST_VERSION(old_h) - 1);
 
@@ -459,8 +440,9 @@ LogObject::_checkout_write(size_t * write_offset, size_t bytes_needed) {
         Debug("log-logbuffer", "adding buffer %d to flush list after checkout", buffer->get_id());
         m_buffer_manager[idx].add_to_flush_queue(buffer);
         Log::preproc_notify[idx].signal();
-
+        buffer = nullptr;
       }
+
       decremented = true;
       break;
 
@@ -476,46 +458,49 @@ LogObject::_checkout_write(size_t * write_offset, size_t bytes_needed) {
       // transaction cannot be logged
       //
       retry = false;
-      buffer = NULL;
       break;
 
     default:
       ink_assert(false);
     }
+
     if (!decremented) {
       head_p old_h;
+
+      // The do-while loop protects us from races while we're examining ptr(old_h) and ptr(h)
+      // (essentially an optimistic lock)
       do {
         INK_QUEUE_LD(old_h, m_log_buffer);
-        if (FREELIST_POINTER(old_h) != FREELIST_POINTER(h))
+        if (FREELIST_POINTER(old_h) != FREELIST_POINTER(h)) {
+          // Another thread's allocated a new LogBuffer, we don't need to do anything more
           break;
-        head_p tmp_h;
-        SET_FREELIST_POINTER_VERSION(tmp_h, FREELIST_POINTER(h), FREELIST_VERSION(old_h) - 1);
-#if TS_HAS_128BIT_CAS
-       result = ink_atomic_cas((__int128_t*) &m_log_buffer.data, old_h.data, tmp_h.data);
-#else
-       result = ink_atomic_cas((int64_t *) &m_log_buffer.data, old_h.data, tmp_h.data);
-#endif
-      } while (!result);
-      if (FREELIST_POINTER(old_h) != FREELIST_POINTER(h))
-        ink_atomic_increment(&buffer->m_references, -1);
-    }
-  } while (retry && write_offset);      // if write_offset is null, we do
-  // not retry because we really do
-  // not want to write to the buffer
-  // only to set it as full
+        }
 
+      } while (!write_pointer_version(&m_log_buffer, old_h, FREELIST_POINTER(h), FREELIST_VERSION(old_h) - 1));
+
+      if (FREELIST_POINTER(old_h) != FREELIST_POINTER(h)) {
+        // Another thread's allocated a new LogBuffer, meaning this LogObject is no longer referencing the old LogBuffer
+        ink_atomic_increment(&buffer->m_references, -1);
+      }
+    }
+
+  } while (retry && write_offset); // if write_offset is null, we do
+  // not retry because we really do not want to write to the buffer,
+  // only to mark the buffer as full
+  if (result_code == LogBuffer::LB_BUFFER_TOO_SMALL) {
+    buffer = nullptr;
+  }
   return buffer;
 }
 
-
 int
-LogObject::va_log(LogAccess * lad, const char * fmt, va_list ap)
+LogObject::va_log(LogAccess *lad, const char *fmt, va_list ap)
 {
   static const unsigned MAX_ENTRY = 16 * LOG_KILOBYTE; // 16K? Really?
   char entry[MAX_ENTRY];
   unsigned len = 0;
 
-  ink_assert(fmt != NULL);
+  ink_assert(fmt != nullptr);
   len = 0;
 
   if (this->m_flags & LOG_OBJECT_FMT_TIMESTAMP) {
@@ -540,10 +525,10 @@ LogObject::va_log(LogAccess * lad, const char * fmt, va_list ap)
 }
 
 int
-LogObject::log(LogAccess * lad, const char *text_entry)
+LogObject::log(LogAccess *lad, const char *text_entry)
 {
   LogBuffer *buffer;
-  size_t offset = 0;            // prevent warning
+  size_t offset       = 0; // prevent warning
   size_t bytes_needed = 0, bytes_used = 0;
 
   // log to a pipe even if space is exhausted since pipe uses no space
@@ -572,7 +557,7 @@ LogObject::log(LogAccess * lad, const char *text_entry)
   if (lad && m_format->is_aggregate()) {
     // marshal the field data into the temp space provided by the
     // LogFormat object for aggregate formats
-    if (m_format->m_agg_marshal_space == NULL) {
+    if (m_format->m_agg_marshal_space == nullptr) {
       Note("No temp space to marshal aggregate fields into");
       return Log::FAIL;
     }
@@ -583,20 +568,20 @@ LogObject::log(LogAccess * lad, const char *text_entry)
     // step through each of the fields and update the LogField object
     // with the newly-marshalled data
     LogFieldList *fl = &m_format->m_field_list;
-    char *data_ptr = m_format->m_agg_marshal_space;
+    char *data_ptr   = m_format->m_agg_marshal_space;
     LogField *f;
     int64_t val;
     for (f = fl->first(); f; f = fl->next(f)) {
-
       // convert to host order to do computations
-      val = (f->is_time_field())? time_now : *((int64_t *) data_ptr);
+      val = (f->is_time_field()) ? time_now : *((int64_t *)data_ptr);
       f->update_aggregate(val);
       data_ptr += INK_MIN_ALIGN;
     }
 
     if (time_now < m_format->m_interval_next) {
       Debug("log-agg", "Time now = %ld, next agg = %ld; not time "
-            "for aggregate entry", time_now, m_format->m_interval_next);
+                       "for aggregate entry",
+            time_now, m_format->m_interval_next);
       return Log::AGGR;
     }
     // can easily compute bytes_needed because all fields are INTs
@@ -618,7 +603,8 @@ LogObject::log(LogAccess * lad, const char *text_entry)
 
   if (!buffer) {
     Note("Skipping the current log entry for %s because its size (%zu) exceeds "
-         "the maximum payload space in a log buffer", m_basename, bytes_needed);
+         "the maximum payload space in a log buffer",
+         m_basename, bytes_needed);
     return Log::FAIL;
   }
   //
@@ -646,15 +632,15 @@ LogObject::log(LogAccess * lad, const char *text_entry)
   return Log::LOG_OK;
 }
 
-
 void
-LogObject::_setup_rolling(Log::RollingEnabledValues rolling_enabled, int rolling_interval_sec, int rolling_offset_hr, int rolling_size_mb)
+LogObject::_setup_rolling(Log::RollingEnabledValues rolling_enabled, int rolling_interval_sec, int rolling_offset_hr,
+                          int rolling_size_mb)
 {
   if (!LogRollingEnabledIsValid((int)rolling_enabled)) {
-    m_rolling_enabled = Log::NO_ROLLING;
+    m_rolling_enabled      = Log::NO_ROLLING;
     m_rolling_interval_sec = 0;
-    m_rolling_offset_hr = 0;
-    m_rolling_size_mb = 0;
+    m_rolling_offset_hr    = 0;
+    m_rolling_size_mb      = 0;
     if (rolling_enabled != Log::NO_ROLLING) {
       Warning("Valid rolling_enabled values are %d to %d, invalid value "
               "(%d) specified for %s, rolling will be disabled for this file.",
@@ -665,8 +651,8 @@ LogObject::_setup_rolling(Log::RollingEnabledValues rolling_enabled, int rolling
   } else {
     // do checks for rolling based on time
     //
-    if (rolling_enabled == Log::ROLL_ON_TIME_ONLY ||
-        rolling_enabled == Log::ROLL_ON_TIME_OR_SIZE || rolling_enabled == Log::ROLL_ON_TIME_AND_SIZE) {
+    if (rolling_enabled == Log::ROLL_ON_TIME_ONLY || rolling_enabled == Log::ROLL_ON_TIME_OR_SIZE ||
+        rolling_enabled == Log::ROLL_ON_TIME_AND_SIZE) {
       if (rolling_interval_sec < Log::MIN_ROLLING_INTERVAL_SEC) {
         // check minimum
         m_rolling_interval_sec = Log::MIN_ROLLING_INTERVAL_SEC;
@@ -679,26 +665,27 @@ LogObject::_setup_rolling(Log::RollingEnabledValues rolling_enabled, int rolling
       } else {
         m_rolling_interval_sec = rolling_interval_sec;
         // increase so it divides day evenly
-        while (Log::MAX_ROLLING_INTERVAL_SEC % ++m_rolling_interval_sec);
+        while (Log::MAX_ROLLING_INTERVAL_SEC % ++m_rolling_interval_sec) {
+          ;
+        }
       }
 
       if (m_rolling_interval_sec != rolling_interval_sec) {
-        Note("Rolling interval adjusted from %d sec to %d sec for %s",
-             rolling_interval_sec, m_rolling_interval_sec, m_filename);
+        Note("Rolling interval adjusted from %d sec to %d sec for %s", rolling_interval_sec, m_rolling_interval_sec, m_filename);
       }
 
-      if (rolling_offset_hr<0 || rolling_offset_hr> 23) {
+      if (rolling_offset_hr < 0 || rolling_offset_hr > 23) {
         rolling_offset_hr = 0;
         Note("Rolling offset out of bounds for %s, setting it to %d", m_filename, rolling_offset_hr);
       }
 
       m_rolling_offset_hr = rolling_offset_hr;
-      m_rolling_size_mb = 0; // it is safe to set it as 0, if we set SIZE rolling,
-                             // it will be updated later
+      m_rolling_size_mb   = 0; // it is safe to set it as 0, if we set SIZE rolling,
+                               // it will be updated later
     }
 
-    if (rolling_enabled == Log::ROLL_ON_SIZE_ONLY ||
-        rolling_enabled == Log::ROLL_ON_TIME_OR_SIZE || rolling_enabled == Log::ROLL_ON_TIME_AND_SIZE) {
+    if (rolling_enabled == Log::ROLL_ON_SIZE_ONLY || rolling_enabled == Log::ROLL_ON_TIME_OR_SIZE ||
+        rolling_enabled == Log::ROLL_ON_TIME_AND_SIZE) {
       if (rolling_size_mb < 10) {
         m_rolling_size_mb = 10;
         Note("Rolling size invalid(%d) for %s, setting it to 10 MB", rolling_size_mb, m_filename);
@@ -711,19 +698,20 @@ LogObject::_setup_rolling(Log::RollingEnabledValues rolling_enabled, int rolling
   }
 }
 
-
 unsigned
 LogObject::roll_files(long time_now)
 {
-  if (!m_rolling_enabled)
+  if (!m_rolling_enabled) {
     return 0;
+  }
 
   unsigned num_rolled = 0;
-  bool roll_on_time = false;
-  bool roll_on_size = false;
+  bool roll_on_time   = false;
+  bool roll_on_size   = false;
 
-  if (!time_now)
+  if (!time_now) {
     time_now = LogUtils::timestamp();
+  }
 
   if (m_rolling_enabled != Log::ROLL_ON_SIZE_ONLY) {
     if (m_rolling_interval_sec > 0) {
@@ -751,8 +739,7 @@ LogObject::roll_files(long time_now)
       const int missed_window = 10;
 
       roll_on_time =
-        ((secs_to_next == 0 ||
-          secs_to_next >= m_rolling_interval_sec - missed_window) && secs_since_last > missed_window);
+        ((secs_to_next == 0 || secs_to_next >= m_rolling_interval_sec - missed_window) && secs_since_last > missed_window);
     }
   }
 
@@ -764,15 +751,13 @@ LogObject::roll_files(long time_now)
     }
   }
 
-  if ((roll_on_time && should_roll_on_time(m_rolling_enabled)) ||
-      (roll_on_size && should_roll_on_size(m_rolling_enabled)) ||
+  if ((roll_on_time && should_roll_on_time(m_rolling_enabled)) || (roll_on_size && should_roll_on_size(m_rolling_enabled)) ||
       (roll_on_time && roll_on_size && m_rolling_enabled == Log::ROLL_ON_TIME_AND_SIZE)) {
     num_rolled = _roll_files(m_last_roll_time, time_now ? time_now : LogUtils::timestamp());
   }
 
   return num_rolled;
 }
-
 
 unsigned
 LogObject::_roll_files(long last_roll_time, long time_now)
@@ -797,49 +782,30 @@ LogObject::_roll_files(long last_roll_time, long time_now)
   return num_rolled;
 }
 
-
 void
 LogObject::check_buffer_expiration(long time_now)
 {
-  LogBuffer *b = (LogBuffer*)FREELIST_POINTER(m_log_buffer);
+  LogBuffer *b = (LogBuffer *)FREELIST_POINTER(m_log_buffer);
   if (b && time_now > b->expiration_time()) {
     force_new_buffer();
   }
 }
 
-
-// make sure that we will be able to write the logs to the disk
-//
-int
-LogObject::do_filesystem_checks()
-{
-  if (m_logFile) {
-    return m_logFile->do_filesystem_checks();
-  } else {
-    return m_host_list.do_filesystem_checks();
-  }
-}
-
-
 /*-------------------------------------------------------------------------
   TextLogObject::TextLogObject
   -------------------------------------------------------------------------*/
-const LogFormat * TextLogObject::textfmt = MakeTextLogFormat();
+const LogFormat *TextLogObject::textfmt = MakeTextLogFormat();
 
-TextLogObject::TextLogObject(const char *name, const char *log_dir,
-                             bool timestamps, const char *header,
-                             Log::RollingEnabledValues rolling_enabled, int flush_threads,
-                             int rolling_interval_sec, int rolling_offset_hr,
-                             int rolling_size_mb)
-  : LogObject(TextLogObject::textfmt, log_dir, name, LOG_FILE_ASCII, header,
-              rolling_enabled, flush_threads, rolling_interval_sec,
+TextLogObject::TextLogObject(const char *name, const char *log_dir, bool timestamps, const char *header,
+                             Log::RollingEnabledValues rolling_enabled, int flush_threads, int rolling_interval_sec,
+                             int rolling_offset_hr, int rolling_size_mb)
+  : LogObject(TextLogObject::textfmt, log_dir, name, LOG_FILE_ASCII, header, rolling_enabled, flush_threads, rolling_interval_sec,
               rolling_offset_hr, rolling_size_mb)
 {
   if (timestamps) {
     this->set_fmt_timestamps();
   }
 }
-
 
 /*-------------------------------------------------------------------------
   TextLogObject::write
@@ -855,7 +821,7 @@ TextLogObject::write(const char *format, ...)
 {
   int ret_val;
 
-  ink_assert(format != NULL);
+  ink_assert(format != nullptr);
   va_list ap;
   va_start(ap, format);
   ret_val = va_write(format, ap);
@@ -863,7 +829,6 @@ TextLogObject::write(const char *format, ...)
 
   return ret_val;
 }
-
 
 /*-------------------------------------------------------------------------
   TextLogObject::va_write
@@ -877,9 +842,8 @@ TextLogObject::write(const char *format, ...)
 int
 TextLogObject::va_write(const char *format, va_list ap)
 {
-  return this->va_log(NULL, format, ap);
+  return this->va_log(nullptr, format, ap);
 }
-
 
 /*-------------------------------------------------------------------------
   LogObjectManager
@@ -888,7 +852,7 @@ TextLogObject::va_write(const char *format, va_list ap)
 LogObjectManager::LogObjectManager()
 {
   _APImutex = new ink_mutex;
-  ink_mutex_init(_APImutex, "_APImutex");
+  ink_mutex_init(_APImutex);
 }
 
 LogObjectManager::~LogObjectManager()
@@ -909,31 +873,23 @@ LogObjectManager::~LogObjectManager()
 }
 
 int
-LogObjectManager::_manage_object(LogObject * log_object, bool is_api_object, int maxConflicts)
+LogObjectManager::_manage_object(LogObject *log_object, bool is_api_object, int maxConflicts)
 {
   if (is_api_object) {
     ACQUIRE_API_MUTEX("A LogObjectManager::_manage_object");
   }
 
   bool col_client = log_object->is_collation_client();
-  int retVal = _solve_internal_filename_conflicts(log_object, maxConflicts);
+  int retVal      = _solve_internal_filename_conflicts(log_object, maxConflicts);
 
   if (retVal == NO_FILENAME_CONFLICTS) {
     // check for external conflicts only if the object is not a collation
     // client
     //
     if (col_client || (retVal = _solve_filename_conflicts(log_object, maxConflicts), retVal == NO_FILENAME_CONFLICTS)) {
-
       // do filesystem checks
       //
-      if (log_object->do_filesystem_checks() < 0) {
-        const char *msg = "The log file %s did not pass filesystem checks. " "No output will be produced for this log";
-        Error(msg, log_object->get_full_filename());
-        LogUtils::manager_alarm(LogUtils::LOG_ALARM_ERROR, msg, log_object->get_full_filename());
-        retVal = ERROR_DOING_FILESYSTEM_CHECKS;
-
-      } else {
-
+      {
         // no conflicts, add object to the list of managed objects
         //
         REF_COUNT_OBJ_REFCOUNT_INC(log_object);
@@ -946,18 +902,16 @@ LogObjectManager::_manage_object(LogObject * log_object, bool is_api_object, int
         ink_release_assert(retVal == NO_FILENAME_CONFLICTS);
 
         Debug("log", "LogObjectManager managing object %s (%s) "
-              "[signature = %" PRIu64 ", address = %p]",
-              log_object->get_base_filename(),
-              col_client ? "collation client" :
-              log_object->get_full_filename(), log_object->get_signature(), log_object);
+                     "[signature = %" PRIu64 ", address = %p]",
+              log_object->get_base_filename(), col_client ? "collation client" : log_object->get_full_filename(),
+              log_object->get_signature(), log_object);
 
         if (log_object->has_alternate_name()) {
           Warning("The full path for the (%s) LogObject %s "
                   "with signature %" PRIu64 " "
                   "has been set to %s rather than %s because the latter "
                   "is being used by another LogObject",
-                  log_object->receives_remote_data()? "remote" : "local",
-                  log_object->get_base_filename(),
+                  log_object->receives_remote_data() ? "remote" : "local", log_object->get_base_filename(),
                   log_object->get_signature(), log_object->get_full_filename(), log_object->get_original_filename());
         }
       }
@@ -971,9 +925,8 @@ LogObjectManager::_manage_object(LogObject * log_object, bool is_api_object, int
   return retVal;
 }
 
-
 int
-LogObjectManager::_solve_filename_conflicts(LogObject * log_object, int maxConflicts)
+LogObjectManager::_solve_filename_conflicts(LogObject *log_object, int maxConflicts)
 {
   int retVal = NO_FILENAME_CONFLICTS;
 
@@ -982,7 +935,7 @@ LogObjectManager::_solve_filename_conflicts(LogObject * log_object, int maxConfl
   if (access(filename, F_OK)) {
     if (errno != ENOENT) {
       const char *msg = "Cannot access log file %s: %s";
-      const char *se = strerror(errno);
+      const char *se  = strerror(errno);
 
       Error(msg, filename, se);
       LogUtils::manager_alarm(LogUtils::LOG_ALARM_ERROR, msg, filename, se);
@@ -992,20 +945,22 @@ LogObjectManager::_solve_filename_conflicts(LogObject * log_object, int maxConfl
     // file exists, try to read metafile to get object signature
     //
     uint64_t signature = 0;
-    MetaInfo meta_info(filename);
+    BaseMetaInfo meta_info(filename);
     bool conflicts = true;
 
     if (meta_info.file_open_successful()) {
-      bool got_sig = meta_info.get_log_object_signature(&signature);
+      bool got_sig     = meta_info.get_log_object_signature(&signature);
       uint64_t obj_sig = log_object->get_signature();
 
       if (got_sig && signature == obj_sig) {
         conflicts = false;
       }
       Debug("log", "LogObjectManager::_solve_filename_conflicts\n"
-            "\tfilename = %s\n"
-            "\tmeta file signature = %" PRIu64 "\n"
-            "\tlog object signature = %" PRIu64 "\n" "\tconflicts = %d", filename, signature, obj_sig, conflicts);
+                   "\tfilename = %s\n"
+                   "\tmeta file signature = %" PRIu64 "\n"
+                   "\tlog object signature = %" PRIu64 "\n"
+                   "\tconflicts = %d",
+            filename, signature, obj_sig, conflicts);
     }
 
     if (conflicts) {
@@ -1037,14 +992,14 @@ LogObjectManager::_solve_filename_conflicts(LogObject * log_object, int maxConfl
             // an error happened while trying to get file info
             //
             const char *msg = "Cannot stat log file %s: %s";
-            char *se = strerror(errno);
+            char *se        = strerror(errno);
 
             Error(msg, filename, se);
             LogUtils::manager_alarm(LogUtils::LOG_ALARM_ERROR, msg, filename, se);
-            retVal = ERROR_DETERMINING_FILE_INFO;
+            retVal    = ERROR_DETERMINING_FILE_INFO;
             roll_file = false;
           } else {
-            if (s.st_mode == S_IFIFO) {
+            if (S_ISFIFO(s.st_mode)) {
               unlink(filename);
               roll_file = false;
             }
@@ -1052,19 +1007,22 @@ LogObjectManager::_solve_filename_conflicts(LogObject * log_object, int maxConfl
         }
         if (roll_file) {
           Warning("File %s will be rolled because a LogObject with "
-                  "different format is requesting the same " "filename", filename);
-          LogFile logfile(filename, NULL, LOG_FILE_ASCII, 0);
-          long time_now = LogUtils::timestamp();
+                  "different format is requesting the same "
+                  "filename",
+                  filename);
+          LogFile logfile(filename, nullptr, LOG_FILE_ASCII, 0);
+          if (logfile.open_file() == LogFile::LOG_FILE_NO_ERROR) {
+            long time_now = LogUtils::timestamp();
 
-          if (logfile.roll(time_now - log_object->get_rolling_interval(), time_now) == 0) {
-            // an error happened while trying to roll the file
-            //
-            const char *msg = "Cannot roll log file %s to fix log " "filename conflicts";
-
-            Error(msg, filename);
-            LogUtils::manager_alarm(LogUtils::LOG_ALARM_ERROR, msg, filename);
+            if (logfile.roll(time_now - log_object->get_rolling_interval(), time_now) == 0) {
+              // an error happened while trying to roll the file
+              //
+              _filename_resolution_abort(filename);
+              retVal = CANNOT_SOLVE_FILENAME_CONFLICTS;
+            }
+          } else {
+            _filename_resolution_abort(filename);
             retVal = CANNOT_SOLVE_FILENAME_CONFLICTS;
-
           }
         }
       }
@@ -1073,12 +1031,20 @@ LogObjectManager::_solve_filename_conflicts(LogObject * log_object, int maxConfl
   return retVal;
 }
 
+void
+LogObjectManager::_filename_resolution_abort(const char *filename)
+{
+  const char *msg = "Cannot roll log file %s to fix log "
+                    "conflicts (filename or log format): %s";
+  const char *err = strerror(errno);
+  Error(msg, filename, err);
+  LogUtils::manager_alarm(LogUtils::LOG_ALARM_ERROR, msg, filename, err);
+}
 
 bool
-LogObjectManager::_has_internal_filename_conflict(const char *filename, LogObjectList& objects)
+LogObjectManager::_has_internal_filename_conflict(const char *filename, LogObjectList &objects)
 {
   for (unsigned i = 0; i < objects.length(); i++) {
-
     if (!objects[i]->is_collation_client()) {
       // an internal conflict exists if two objects request the
       // same filename, regardless of the object signatures, since
@@ -1092,20 +1058,17 @@ LogObjectManager::_has_internal_filename_conflict(const char *filename, LogObjec
   return false;
 }
 
-
 int
 LogObjectManager::_solve_internal_filename_conflicts(LogObject *log_object, int maxConflicts, int fileNum)
 {
-  int retVal = NO_FILENAME_CONFLICTS;
+  int retVal           = NO_FILENAME_CONFLICTS;
   const char *filename = log_object->get_full_filename();
 
-  if (_has_internal_filename_conflict(filename, _objects) ||
-      _has_internal_filename_conflict(filename, _APIobjects)) {
+  if (_has_internal_filename_conflict(filename, _objects) || _has_internal_filename_conflict(filename, _APIobjects)) {
     if (fileNum < maxConflicts) {
       char new_name[MAXPATHLEN];
 
-      snprintf(new_name, sizeof(new_name), "%s%s%d",
-               log_object->get_original_filename(), LOGFILE_SEPARATOR_STRING, ++fileNum);
+      snprintf(new_name, sizeof(new_name), "%s%s%d", log_object->get_original_filename(), LOGFILE_SEPARATOR_STRING, ++fileNum);
       log_object->rename(new_name);
       retVal = _solve_internal_filename_conflicts(log_object, maxConflicts, fileNum);
     } else {
@@ -1119,20 +1082,18 @@ LogObjectManager::_solve_internal_filename_conflicts(LogObject *log_object, int 
   return retVal;
 }
 
-
 LogObject *
 LogObjectManager::get_object_with_signature(uint64_t signature)
 {
   for (unsigned i = 0; i < this->_objects.length(); i++) {
-    LogObject * obj = this->_objects[i];
+    LogObject *obj = this->_objects[i];
 
     if (obj->get_signature() == signature) {
       return obj;
     }
   }
-  return NULL;
+  return nullptr;
 }
-
 
 void
 LogObjectManager::check_buffer_expiration(long time_now)
@@ -1170,9 +1131,8 @@ LogObjectManager::preproc_buffers(int idx)
   return buffers_preproced;
 }
 
-
 bool
-LogObjectManager::unmanage_api_object(LogObject * logObject)
+LogObjectManager::unmanage_api_object(LogObject *logObject)
 {
   ACQUIRE_API_MUTEX("A LogObjectManager::unmanage_api_object");
 
@@ -1191,15 +1151,13 @@ LogObjectManager::unmanage_api_object(LogObject * logObject)
   return false;
 }
 
-
 void
-LogObjectManager::add_filter_to_all(LogFilter * filter)
+LogObjectManager::add_filter_to_all(LogFilter *filter)
 {
   for (unsigned i = 0; i < this->_objects.length(); i++) {
     _objects[i]->add_filter(filter);
   }
 }
-
 
 void
 LogObjectManager::open_local_pipes()
@@ -1215,9 +1173,8 @@ LogObjectManager::open_local_pipes()
   }
 }
 
-
 void
-LogObjectManager::transfer_objects(LogObjectManager & old_mgr)
+LogObjectManager::transfer_objects(LogObjectManager &old_mgr)
 {
   unsigned num_kept_objects = 0;
 
@@ -1241,8 +1198,8 @@ LogObjectManager::transfer_objects(LogObjectManager & old_mgr)
   }
 
   for (unsigned i = 0; i < old_mgr._objects.length(); ++i) {
-    LogObject * old_obj = old_mgr._objects[i];
-    LogObject * new_obj;
+    LogObject *old_obj = old_mgr._objects[i];
+    LogObject *new_obj;
 
     Debug("log-config-transfer", "examining existing object %s", old_obj->get_base_filename());
 
@@ -1252,8 +1209,8 @@ LogObjectManager::transfer_objects(LogObjectManager & old_mgr)
     for (unsigned j = 0; j < _objects.length(); j++) {
       new_obj = _objects[j];
 
-      Debug("log-config-transfer",
-            "comparing existing object %s to new object %s", old_obj->get_base_filename(), new_obj->get_base_filename());
+      Debug("log-config-transfer", "comparing existing object %s to new object %s", old_obj->get_base_filename(),
+            new_obj->get_base_filename());
 
       if (*new_obj == *old_obj) {
         Debug("log-config-transfer", "keeping existing object %s", old_obj->get_base_filename());
@@ -1297,7 +1254,7 @@ LogObjectManager::roll_files(long time_now)
 }
 
 void
-LogObjectManager::display(FILE * str)
+LogObjectManager::display(FILE *str)
 {
   for (unsigned i = 0; i < this->_objects.length(); i++) {
     _objects[i]->display(str);
@@ -1318,7 +1275,7 @@ LogObjectManager::find_by_format_name(const char *name) const
       return this->_objects[i];
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 unsigned
@@ -1335,10 +1292,10 @@ LogObjectManager::get_num_collation_clients() const
 }
 
 int
-LogObjectManager::log(LogAccess * lad)
+LogObjectManager::log(LogAccess *lad)
 {
-  int ret = Log::SKIP;
-  ProxyMutex *mutex = this_thread()->mutex;
+  int ret           = Log::SKIP;
+  ProxyMutex *mutex = this_thread()->mutex.get();
 
   for (unsigned i = 0; i < this->_objects.length(); i++) {
     //
@@ -1346,8 +1303,9 @@ LogObjectManager::log(LogAccess * lad)
     // data received from network in collation host. It should
     // be ignored here.
     //
-    if (_objects[i]->m_auto_created)
+    if (_objects[i]->m_auto_created) {
       continue;
+    }
 
     ret |= _objects[i]->log(lad);
   }
@@ -1358,20 +1316,15 @@ LogObjectManager::log(LogAccess * lad)
   // The if-statement should keep step with the priority order.
   //
   if (unlikely(ret & Log::FAIL)) {
-    RecIncrRawStat(log_rsb, mutex->thread_holding,
-                   log_stat_event_log_access_fail_stat, 1);
+    RecIncrRawStat(log_rsb, mutex->thread_holding, log_stat_event_log_access_fail_stat, 1);
   } else if (unlikely(ret & Log::FULL)) {
-    RecIncrRawStat(log_rsb, mutex->thread_holding,
-                   log_stat_event_log_access_full_stat, 1);
+    RecIncrRawStat(log_rsb, mutex->thread_holding, log_stat_event_log_access_full_stat, 1);
   } else if (likely(ret & Log::LOG_OK)) {
-    RecIncrRawStat(log_rsb, mutex->thread_holding,
-                   log_stat_event_log_access_ok_stat, 1);
+    RecIncrRawStat(log_rsb, mutex->thread_holding, log_stat_event_log_access_ok_stat, 1);
   } else if (unlikely(ret & Log::AGGR)) {
-    RecIncrRawStat(log_rsb, mutex->thread_holding,
-                   log_stat_event_log_access_aggr_stat, 1);
+    RecIncrRawStat(log_rsb, mutex->thread_holding, log_stat_event_log_access_aggr_stat, 1);
   } else if (likely(ret & Log::SKIP)) {
-    RecIncrRawStat(log_rsb, mutex->thread_holding,
-                   log_stat_event_log_access_skip_stat, 1);
+    RecIncrRawStat(log_rsb, mutex->thread_holding, log_stat_event_log_access_skip_stat, 1);
   } else {
     ink_release_assert("Unexpected result");
   }
@@ -1398,21 +1351,20 @@ LogObjectManager::flush_all_objects()
 #if TS_HAS_TESTS
 
 static LogObject *
-MakeTestLogObject(const char * name)
+MakeTestLogObject(const char *name)
 {
-  const char * tmpdir = getenv("TMPDIR");
-  LogFormat format("testfmt", NULL);
+  const char *tmpdir = getenv("TMPDIR");
+  LogFormat format("testfmt", nullptr);
 
   if (!tmpdir) {
     tmpdir = "/tmp";
   }
 
-  return new LogObject(&format, tmpdir, name,
-                       LOG_FILE_ASCII /* file_format */, name /* header */,
+  return new LogObject(&format, tmpdir, name, LOG_FILE_ASCII /* file_format */, name /* header */,
                        Log::ROLL_ON_TIME_ONLY /* rolling_enabled */, 1 /* flush_threads */);
 }
 
-REGRESSION_TEST(LogObjectManager_Transfer)(RegressionTest * t, int /* atype ATS_UNUSED */, int * pstatus)
+REGRESSION_TEST(LogObjectManager_Transfer)(RegressionTest *t, int /* atype ATS_UNUSED */, int *pstatus)
 {
   TestBox box(t, pstatus);
 
@@ -1430,11 +1382,12 @@ REGRESSION_TEST(LogObjectManager_Transfer)(RegressionTest * t, int /* atype ATS_
 
     mgr2.transfer_objects(mgr1);
 
-    rprintf(t, "mgr1 has %d objects, mgr2 has %d objects\n",
-        (int)mgr1.get_num_objects(), (int)mgr2.get_num_objects());
+    rprintf(t, "mgr1 has %d objects, mgr2 has %d objects\n", (int)mgr1.get_num_objects(), (int)mgr2.get_num_objects());
+    box.check(mgr1.get_num_objects() == 0, "Testing that manager 1 has 0 objects");
+    box.check(mgr2.get_num_objects() == 4, "Testing that manager 2 has 4 objects");
 
     rprintf(t, "running Log::periodoc_tasks()\n");
-    Log::periodic_tasks(ink_get_hrtime() / HRTIME_SECOND);
+    Log::periodic_tasks(Thread::get_hrtime() / HRTIME_SECOND);
     rprintf(t, "Log::periodoc_tasks() done\n");
   }
 

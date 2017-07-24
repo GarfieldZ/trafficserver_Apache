@@ -16,32 +16,28 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+include $(top_srcdir)/build/tidy.mk
+
 # Note that hdrs is targeted from ../Makefile.am
 noinst_LIBRARIES = \
-  liberror.a \
   libdiagsconfig.a \
-  libUglyLogStubs.a \
-  libxml.a
+  libUglyLogStubs.a
 
-AM_CPPFLAGS = \
+AM_CPPFLAGS += \
   $(iocore_include_dirs) \
-  -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
-  -I$(top_srcdir)/mgmt \
-  -I$(top_srcdir)/mgmt/api \
-  -I$(top_srcdir)/mgmt/api/include \
-  -I$(top_srcdir)/mgmt/utils \
-  -I$(top_srcdir) \
-  -I$(top_srcdir)/proxy/api/ts \
-  -I$(top_srcdir)/proxy \
-  -I$(top_srcdir)/proxy/http \
-  -I$(top_srcdir)/proxy/hdrs \
-  -I$(top_srcdir)/proxy/logging \
-  -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib
+  -I$(abs_top_srcdir)/lib/records \
+  -I$(abs_top_srcdir)/mgmt \
+  -I$(abs_top_srcdir)/mgmt/api \
+  -I$(abs_top_srcdir)/mgmt/api/include \
+  -I$(abs_top_srcdir)/mgmt/utils \
+  -I$(abs_top_srcdir) \
+  -I$(abs_top_srcdir)/proxy \
+  -I$(abs_top_srcdir)/proxy/http \
+  -I$(abs_top_srcdir)/proxy/hdrs \
+  -I$(abs_top_srcdir)/proxy/logging \
+  -I$(abs_top_srcdir)/lib
 
-liberror_a_SOURCES = \
-  Error.cc
+
 
 libdiagsconfig_a_SOURCES = \
   DiagsConfig.cc
@@ -49,6 +45,5 @@ libdiagsconfig_a_SOURCES = \
 libUglyLogStubs_a_SOURCES = \
   UglyLogStubs.cc
 
-libxml_a_SOURCES = \
-  InkXml.cc \
-  InkXml.h
+tidy-local: $(libdiagsconfig_a_SOURCES) $(libUglyLogStubs_a_SOURCES)
+	$(CXX_Clang_Tidy)

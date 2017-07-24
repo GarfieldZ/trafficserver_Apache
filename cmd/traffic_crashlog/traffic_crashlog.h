@@ -24,7 +24,10 @@
 #ifndef __TRAFFIC_CRASHLOG_H__
 #define __TRAFFIC_CRASHLOG_H__
 
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_memory.h"
+#include "ts/Diags.h"
+#include "ts/TextBuffer.h"
 #include "mgmtapi.h"
 
 // ucontext.h is deprecated on Darwin, and we really only need it on Linux, so only
@@ -37,10 +40,10 @@
 #define LABELFMT "%-20s"
 
 // Printf format for memory addresses.
-#if SIZEOF_VOID_POINTER == 8
+#if SIZEOF_VOIDP == 8
 #define ADDRFMT "0x%016" PRIx64
 #define ADDRCAST(x) ((uint64_t)(x))
-#elif SIZEOF_VOID_POINTER == 4
+#elif SIZEOF_VOIDP == 4
 #define ADDRFMT "0x%08" PRIx32
 #define ADDRCAST(x) ((uint32_t)(x))
 #else
@@ -49,28 +52,28 @@
 
 #define CRASHLOG_HAVE_THREADINFO 0x1u
 
-struct crashlog_target
-{
-  pid_t       pid;
-  siginfo_t   siginfo;
+struct crashlog_target {
+  pid_t pid;
+  siginfo_t siginfo;
 #if defined(__linux__)
-  ucontext_t  ucontext;
+  ucontext_t ucontext;
 #else
-  char        ucontext; // just a placeholder ...
+  char ucontext; // just a placeholder ...
 #endif
-  struct tm   timestamp;
-  unsigned    flags;
+  struct tm timestamp;
+  unsigned flags;
 };
 
-bool crashlog_write_backtrace(FILE *, const crashlog_target&);
-bool crashlog_write_regions(FILE * , const crashlog_target&);
-bool crashlog_write_exename(FILE *, const crashlog_target&);
-bool crashlog_write_uname(FILE *, const crashlog_target&);
-bool crashlog_write_datime(FILE *, const crashlog_target&);
-bool crashlog_write_procname(FILE *, const crashlog_target&);
-bool crashlog_write_procstatus(FILE *, const crashlog_target&);
-bool crashlog_write_records(FILE *, const crashlog_target&);
-bool crashlog_write_siginfo(FILE *, const crashlog_target&);
-bool crashlog_write_registers(FILE *, const crashlog_target&);
+bool crashlog_write_backtrace(FILE *, const crashlog_target &);
+bool crashlog_write_datime(FILE *, const crashlog_target &);
+bool crashlog_write_exename(FILE *, const crashlog_target &);
+bool crashlog_write_proclimits(FILE *, const crashlog_target &);
+bool crashlog_write_procname(FILE *, const crashlog_target &);
+bool crashlog_write_procstatus(FILE *, const crashlog_target &);
+bool crashlog_write_records(FILE *, const crashlog_target &);
+bool crashlog_write_regions(FILE *, const crashlog_target &);
+bool crashlog_write_registers(FILE *, const crashlog_target &);
+bool crashlog_write_siginfo(FILE *, const crashlog_target &);
+bool crashlog_write_uname(FILE *, const crashlog_target &);
 
 #endif /* __TRAFFIC_CRASHLOG_H__ */

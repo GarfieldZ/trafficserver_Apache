@@ -29,46 +29,51 @@
  *
  ****************************************************************************/
 
-#include "libts.h"      /* MAGIC_EDITING_TAG */
+#include "ts/ink_platform.h"
+#include "ts/Diags.h"
+#include "ts/ink_memory.h"
+#include "ts/ink_inet.h"
+#include "ts/ink_assert.h"
+#include "ts/MatcherUtils.h"
+#include "ts/Tokenizer.h"
 
 // char* readIntoBuffer(const char* file_path, const char* module_name,
 //                          int* read_size_ptr)
 //
 //  Attempts to open and read arg file_path into a buffer allocated
 //   off the heap (via malloc() )  Returns a pointer to the buffer
-//   is successful and NULL otherwise.
+//   is successful and nullptr otherwise.
 //
 //  CALLEE is responsibled for deallocating the buffer via free()
 //
 char *
 readIntoBuffer(const char *file_path, const char *module_name, int *read_size_ptr)
 {
-
   int fd;
   struct stat file_info;
   char *file_buf;
   int read_size = 0;
 
-  if (read_size_ptr != NULL) {
+  if (read_size_ptr != nullptr) {
     *read_size_ptr = 0;
   }
   // Open the file for Blocking IO.  We will be reading this
   //   at start up and infrequently afterward
-  if ((fd = open(file_path, O_RDONLY | _O_ATTRIB_NORMAL)) < 0) {
+  if ((fd = open(file_path, O_RDONLY)) < 0) {
     Error("%s Can not open %s file : %s", module_name, file_path, strerror(errno));
-    return NULL;
+    return nullptr;
   }
 
   if (fstat(fd, &file_info) < 0) {
     Error("%s Can not stat %s file : %s", module_name, file_path, strerror(errno));
     close(fd);
-    return NULL;
+    return nullptr;
   }
 
   if (file_info.st_size < 0) {
-    Error("%s Can not get correct file size for %s file : %" PRId64 "", module_name, file_path, (int64_t) file_info.st_size);
+    Error("%s Can not get correct file size for %s file : %" PRId64 "", module_name, file_path, (int64_t)file_info.st_size);
     close(fd);
-    return NULL;
+    return nullptr;
   }
   // Allocate a buffer large enough to hold the entire file
   //   File size should be small and this makes it easy to
@@ -83,12 +88,11 @@ readIntoBuffer(const char *file_path, const char *module_name, int *read_size_pt
   if (read_size < 0) {
     Error("%s Read of %s file failed : %s", module_name, file_path, strerror(errno));
     ats_free(file_buf);
-    file_buf = NULL;
+    file_buf = nullptr;
   } else if (read_size < file_info.st_size) {
     // We don't want to signal this error on WIN32 because the sizes
     // won't match if the file contains any CR/LF sequence.
-    Error("%s Only able to read %d bytes out %d for %s file",
-          module_name, read_size, (int) file_info.st_size, file_path);
+    Error("%s Only able to read %d bytes out %d for %s file", module_name, read_size, (int)file_info.st_size, file_path);
     file_buf[read_size] = '\0';
   }
 
@@ -109,7 +113,7 @@ readIntoBuffer(const char *file_path, const char *module_name, int *read_size_pt
 int
 unescapifyStr(char *buffer)
 {
-  char *read = buffer;
+  char *read  = buffer;
   char *write = buffer;
   char subStr[3];
 
@@ -118,7 +122,7 @@ unescapifyStr(char *buffer)
     if (*read == '%' && *(read + 1) != '\0' && *(read + 2) != '\0') {
       subStr[0] = *(++read);
       subStr[1] = *(++read);
-      *write = (char)strtol(subStr, (char **) NULL, 16);
+      *write    = (char)strtol(subStr, (char **)nullptr, 16);
       read++;
       write++;
     } else if (*read == '+') {
@@ -136,14 +140,19 @@ unescapifyStr(char *buffer)
   return (write - buffer);
 }
 
-char const*
-ExtractIpRange(char* match_str, in_addr_t* min, in_addr_t* max) {
+const char *
+ExtractIpRange(char *match_str, in_addr_t *min, in_addr_t *max)
+{
   IpEndpoint ip_min, ip_max;
-  char const* zret = ExtractIpRange(match_str, &ip_min.sa, &ip_max.sa);
-  if (0 == zret) { // success
+  const char *zret = ExtractIpRange(match_str, &ip_min.sa, &ip_max.sa);
+  if (nullptr == zret) { // success
     if (ats_is_ip4(&ip_min) && ats_is_ip4(&ip_max)) {
-      if (min) *min = ntohl(ats_ip4_addr_cast(&ip_min));
-      if (max) *max = ntohl(ats_ip4_addr_cast(&ip_max));
+      if (min) {
+        *min = ntohl(ats_ip4_addr_cast(&ip_min));
+      }
+      if (max) {
+        *max = ntohl(ats_ip4_addr_cast(&ip_max));
+      }
     } else {
       zret = "The addresses were not IPv4 addresses.";
     }
@@ -160,16 +169,16 @@ ExtractIpRange(char* match_str, in_addr_t* min, in_addr_t* max) {
 //
 //   If the extraction is successful, sets addr1 and addr2
 //     to the extracted values (in the case of a single
-//     address addr2 = addr1) and returns NULL
+//     address addr2 = addr1) and returns nullptr
 //
 //   If the extraction fails, returns a static string
 //     that describes the reason for the error.
 //
 const char *
-ExtractIpRange(char *match_str, sockaddr* addr1, sockaddr* addr2)
+ExtractIpRange(char *match_str, sockaddr *addr1, sockaddr *addr2)
 {
   Tokenizer rangeTok("-/");
-  bool mask = strchr(match_str, '/') != NULL;
+  bool mask = strchr(match_str, '/') != nullptr;
   int mask_bits;
   int mask_val;
   int numToks;
@@ -190,7 +199,6 @@ ExtractIpRange(char *match_str, sockaddr* addr1, sockaddr* addr2)
 
   // Handle a IP range
   if (numToks == 2) {
-
     if (mask) {
       if (!ats_is_ip4(&la1)) {
         return "Masks supported only for IPv4";
@@ -229,7 +237,7 @@ ExtractIpRange(char *match_str, sockaddr* addr1, sockaddr* addr2)
   }
 
   ats_ip_copy(addr1, &la1);
-  return NULL;
+  return nullptr;
 }
 
 // char* tokLine(char* buf, char** last, char cont)
@@ -242,23 +250,22 @@ tokLine(char *buf, char **last, char cont)
 {
   char *start;
   char *cur;
-  char *prev = NULL;
+  char *prev = nullptr;
 
-  if (buf != NULL) {
+  if (buf != nullptr) {
     start = cur = buf;
-    *last = buf;
+    *last       = buf;
   } else {
     start = cur = (*last) + 1;
   }
 
   while (*cur != '\0') {
     if (*cur == '\n') {
-      if (cont != '\0' && prev != NULL && *prev == cont) {
+      if (cont != '\0' && prev != nullptr && *prev == cont) {
         *prev = ' ';
-        *cur = ' ';
-      }
-      else {
-        *cur = '\0';
+        *cur  = ' ';
+      } else {
+        *cur  = '\0';
         *last = cur;
         return start;
       }
@@ -273,18 +280,10 @@ tokLine(char *buf, char **last, char cont)
     return start;
   }
 
-  return NULL;
+  return nullptr;
 }
 
-const char *matcher_type_str[] = {
-  "invalid",
-  "host",
-  "domain",
-  "ip",
-  "url_regex",
-  "url",
-  "host_regex"
-};
+const char *matcher_type_str[] = {"invalid", "host", "domain", "ip", "url_regex", "url", "host_regex"};
 
 // char* processDurationString(char* str, int* seconds)
 //
@@ -299,13 +298,13 @@ const char *matcher_type_str[] = {
 //   Trailing digits without a specifier are
 //    assumed to be seconds
 //
-//   Returns NULL on success and a static
+//   Returns nullptr on success and a static
 //    error string on failure
 //
 const char *
 processDurationString(char *str, int *seconds)
 {
-  char *s = str;
+  char *s       = str;
   char *current = str;
   char unit;
   int tmp;
@@ -313,14 +312,13 @@ processDurationString(char *str, int *seconds)
   int result = 0;
   int len;
 
-  if (str == NULL) {
+  if (str == nullptr) {
     return "Missing time";
   }
 
   len = strlen(str);
   for (int i = 0; i < len; i++) {
     if (!ParseRules::is_digit(*current)) {
-
       // Make sure there is a time to proces
       if (current == s) {
         return "Malformed time";
@@ -362,7 +360,6 @@ processDurationString(char *str, int *seconds)
 
       result += (multiplier * tmp);
       s = current + 1;
-
     }
     current++;
   }
@@ -385,20 +382,16 @@ processDurationString(char *str, int *seconds)
   }
 
   *seconds = result;
-  return NULL;
+  return nullptr;
 }
 
-const matcher_tags http_dest_tags = {
-  "dest_host", "dest_domain", "dest_ip", "url_regex", "url", "host_regex", true
-};
+const matcher_tags http_dest_tags = {"dest_host", "dest_domain", "dest_ip", "url_regex", "url", "host_regex", true};
 
-const matcher_tags ip_allow_tags = {
-  NULL, NULL, "src_ip", NULL, NULL, NULL, false
-};
+const matcher_tags ip_allow_src_tags = {nullptr, nullptr, "src_ip", nullptr, nullptr, nullptr, false};
 
-const matcher_tags socks_server_tags = {
-  NULL, NULL, "dest_ip", NULL, NULL, NULL, false
-};
+const matcher_tags ip_allow_dest_tags = {nullptr, nullptr, "dest_ip", nullptr, nullptr, nullptr, true};
+
+const matcher_tags socks_server_tags = {nullptr, nullptr, "dest_ip", nullptr, nullptr, nullptr, false};
 
 // char* parseConfigLine(char* line, matcher_line* p_line,
 //                       const matcher_tags* tags)
@@ -406,37 +399,38 @@ const matcher_tags socks_server_tags = {
 //   Parse out a config file line suitable for passing to
 //    a ControlMatcher object
 //
-//   If successful, NULL is returned.  If unsuccessful,
+//   If successful, nullptr is returned.  If unsuccessful,
 //     a static error string is returned
 //
 const char *
-parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
+parseConfigLine(char *line, matcher_line *p_line, const matcher_tags *tags)
 {
-  enum pState
-  {
-    FIND_LABEL, PARSE_LABEL,
-    PARSE_VAL, START_PARSE_VAL, CONSUME
+  enum pState {
+    FIND_LABEL,
+    PARSE_LABEL,
+    PARSE_VAL,
+    START_PARSE_VAL,
+    CONSUME,
   };
 
-  pState state = FIND_LABEL;
-  bool inQuote = false;
-  char *copyForward = NULL;
-  char *copyFrom = NULL;
-  char *s = line;
-  char *label = NULL;
-  char *val = NULL;
-  int num_el = 0;
+  pState state      = FIND_LABEL;
+  bool inQuote      = false;
+  char *copyForward = nullptr;
+  char *copyFrom    = nullptr;
+  char *s           = line;
+  char *label       = nullptr;
+  char *val         = nullptr;
+  int num_el        = 0;
   matcher_type type = MATCH_NONE;
 
   // Zero out the parsed line structure
   memset(p_line, 0, sizeof(matcher_line));
 
   if (*s == '\0') {
-    return NULL;
+    return nullptr;
   }
 
   do {
-
     switch (state) {
     case FIND_LABEL:
       if (!isspace(*s)) {
@@ -447,26 +441,25 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
       break;
     case PARSE_LABEL:
       if (*s == '=') {
-        *s = '\0';
+        *s    = '\0';
         state = START_PARSE_VAL;
       }
       s++;
       break;
     case START_PARSE_VAL:
       // Init state needed for parsing values
-      copyForward = NULL;
-      copyFrom = NULL;
+      copyForward = nullptr;
+      copyFrom    = nullptr;
 
       if (*s == '"') {
         inQuote = true;
-        val = s + 1;
+        val     = s + 1;
       } else if (*s == '\\') {
         inQuote = false;
-        val = s + 1;
+        val     = s + 1;
       } else {
         inQuote = false;
-        val = s;
-
+        val     = s;
       }
 
       if (inQuote == false && (isspace(*s) || *(s + 1) == '\0')) {
@@ -489,7 +482,7 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
           //  end is right now, defer the work
           //  into the future
 
-          if (copyForward != NULL) {
+          if (copyForward != nullptr) {
             // Perform the prior copy forward
             int bytesCopy = s - copyFrom;
             memcpy(copyForward, copyFrom, s - copyFrom);
@@ -499,7 +492,7 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
             copyFrom = s + 1;
           } else {
             copyForward = s;
-            copyFrom = s + 1;
+            copyFrom    = s + 1;
           }
 
           // Scroll past the escape character
@@ -512,17 +505,16 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
           }
         } else if (*s == '"') {
           state = CONSUME;
-          *s = '\0';
+          *s    = '\0';
         }
-      } else if ((*s == '\\' && ParseRules::is_digit(*(s + 1)))
-                 || !ParseRules::is_char(*s)) {
+      } else if ((*s == '\\' && ParseRules::is_digit(*(s + 1))) || !ParseRules::is_char(*s)) {
         // INKqa10511
         // traffic server need to handle unicode characters
         // right now ignore the entry
         return "Unrecognized encoding scheme";
       } else if (isspace(*s)) {
         state = CONSUME;
-        *s = '\0';
+        *s    = '\0';
       }
 
       s++;
@@ -538,10 +530,9 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
     }
 
     if (state == CONSUME) {
-
       // See if there are any quote copy overs
       //   we've pushed into the future
-      if (copyForward != NULL) {
+      if (copyForward != nullptr) {
         int toCopy = (s - 1) - copyFrom;
         memcpy(copyForward, copyFrom, toCopy);
         *(copyForward + toCopy) = '\0';
@@ -549,7 +540,7 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
 
       p_line->line[0][num_el] = label;
       p_line->line[1][num_el] = val;
-      type = MATCH_NONE;
+      type                    = MATCH_NONE;
 
       // Check to see if this the primary specifier we are looking for
       if (tags->match_ip && strcasecmp(tags->match_ip, label) == 0) {
@@ -570,13 +561,13 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
         // Check to see if this second destination specifier
         if (p_line->type != MATCH_NONE) {
           if (tags->dest_error_msg == false) {
-            return "Muliple Sources Specified";
+            return "Multiple Sources Specified";
           } else {
-            return "Muliple Destinations Specified";
+            return "Multiple Destinations Specified";
           }
         } else {
           p_line->dest_entry = num_el;
-          p_line->type = type;
+          p_line->type       = type;
         }
       }
       num_el++;
@@ -603,5 +594,5 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
     }
   }
 
-  return NULL;
+  return nullptr;
 }

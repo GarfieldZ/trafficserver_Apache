@@ -21,12 +21,10 @@
   limitations under the License.
  */
 
-
-
 #ifndef LOG_SOCK_H
 #define LOG_SOCK_H
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 
 /*-------------------------------------------------------------------------
   LogSock
@@ -38,36 +36,32 @@
 class LogSock
 {
 public:
-  enum Constant
-  {
+  enum Constant {
     LS_CONST_PACKETSIZE = 1024,
-    LS_CONST_CLUSTER_MAX_MACHINES = 256
+    LS_CONST_MAX_CONNS  = 256,
   };
 
-  enum Err
-  {
-    LS_ERROR_UNKNOWN = -1,
+  enum Err {
+    LS_ERROR_UNKNOWN            = -1,
     LS_ERROR_CONNECT_TABLE_FULL = -3,
-    LS_ERROR_SOCKET = -4,
-    LS_ERROR_BIND = -5,
-    LS_ERROR_CONNECT = -6,
-    LS_ERROR_ACCEPT = -7,
-    LS_ERROR_NO_SUCH_HOST = -8,
-    LS_ERROR_NO_CONNECTION = -9,
-    LS_ERROR_STATE = -10,
-    LS_ERROR_WRITE = -11,
-    LS_ERROR_READ = -12
+    LS_ERROR_SOCKET             = -4,
+    LS_ERROR_BIND               = -5,
+    LS_ERROR_CONNECT            = -6,
+    LS_ERROR_ACCEPT             = -7,
+    LS_ERROR_NO_SUCH_HOST       = -8,
+    LS_ERROR_NO_CONNECTION      = -9,
+    LS_ERROR_STATE              = -10,
+    LS_ERROR_WRITE              = -11,
+    LS_ERROR_READ               = -12
   };
 
-  enum State
-  {
+  enum State {
     LS_STATE_UNUSED = 0,
     LS_STATE_INCOMING,
     LS_STATE_OUTGOING,
-    LS_N_STATES
+    LS_N_STATES,
   };
 
-public:
   LogSock(int max_connects = 1);
   ~LogSock();
 
@@ -78,22 +72,24 @@ public:
 
   int listen(int accept_port, int family = AF_INET);
   int accept();
-  int connect(sockaddr const* ip);
+  int connect(sockaddr const *ip);
 
-  void close(int cid);          // this connection
-  void close();                 // all connections
+  void close(int cid); // this connection
+  void close();        // all connections
 
   int write(int cid, void *buf, int bytes);
 
   int read(int cid, void *buf, unsigned maxsize);
   void *read_alloc(int cid, int *size);
 
-  char *on_host()
+  char *
+  on_host()
   {
     return ct[0].host;
   }
 
-  int on_port()
+  int
+  on_port()
   {
     return ct[0].port;
   }
@@ -104,36 +100,32 @@ public:
   char *connected_host(int cid);
   int connected_port(int cid);
 
-private:
-  struct ConnectTable
-  {
-    char *host;                 // hostname for this connection
-    int port;                   // port number for this connection
-    int sd;                     // socket descriptor for this connection
-    State state;                // state of this entry
-  };
-
-  struct MsgHeader
-  {
-    int msg_bytes;              // length of the following message
-  };
+  // noncopyable
+  LogSock(const LogSock &) = delete;
+  LogSock &operator=(const LogSock &) = delete;
 
 private:
+  struct ConnectTable {
+    char *host;  // hostname for this connection
+    int port;    // port number for this connection
+    int sd;      // socket descriptor for this connection
+    State state; // state of this entry
+  };
+
+  struct MsgHeader {
+    int msg_bytes; // length of the following message
+  };
+
   bool pending_data(int *cid, int timeout_msec, bool include_connects);
   int new_cid();
   void init_cid(int cid, char *host, int port, int sd, State state);
-  int read_header(int sd, MsgHeader * header);
+  int read_header(int sd, MsgHeader *header);
   int read_body(int sd, void *buf, int bytes);
 
-private:
-  ConnectTable * ct;            // list of all connections; index 0 is
+  ConnectTable *ct; // list of all connections; index 0 is
   // the accept port.
-  bool m_accept_connections;    // do we accept new connections?
-  int m_max_connections;        // max size of all tables
-
-private:
-  LogSock(const LogSock &);
-  LogSock & operator=(const LogSock &);
+  bool m_accept_connections; // do we accept new connections?
+  int m_max_connections;     // max size of all tables
 };
 
 #endif

@@ -21,7 +21,8 @@
   limitations under the License.
  */
 
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_string.h"
 #include "GenericParser.h"
 
 /***************************************************************************
@@ -31,7 +32,7 @@
  *   free callers from allocating the memory.
  ***************************************************************************/
 
-Token::Token():name(NULL), value(NULL)
+Token::Token() : name(nullptr), value(nullptr)
 {
 }
 
@@ -44,8 +45,8 @@ Token::~Token()
 void
 Token::setName(const char *str)
 {
-  name = (char *) strtrim(str);
-  //name = ats_strdup(str_copy); DOESN't WORK
+  name = (char *)strtrim(str);
+  // name = ats_strdup(str_copy); DOESN't WORK
 }
 
 //
@@ -55,14 +56,14 @@ Token::setName(const char *str)
 void
 Token::setValue(const char *str)
 {
-  char *str_copy = (char *) strtrim(str);
+  char *str_copy = (char *)strtrim(str);
   // Can't use ats_strdup after strtrim?
   //  value = ats_strdup(str);
-  ink_assert(value == NULL);
+  ink_assert(value == nullptr);
   if (str_copy) {
     size_t len = strlen(str_copy);
-    value = (char *)ats_malloc(sizeof(char) * (BUFSIZ));
-    len = (len < BUFSIZ) ? len : BUFSIZ - 1;
+    value      = (char *)ats_malloc(sizeof(char) * (BUFSIZ));
+    len        = (len < BUFSIZ) ? len : BUFSIZ - 1;
     memcpy(value, str_copy, len);
     value[len] = '\0';
     ats_free(str_copy);
@@ -72,10 +73,10 @@ Token::setValue(const char *str)
 void
 Token::appendValue(const char *str)
 {
-  char *str_copy = (char *) strtrim(str);
+  char *str_copy        = (char *)strtrim(str);
   static bool firstTime = true;
 
-  if (value == NULL) {
+  if (value == nullptr) {
     setValue(str_copy);
   } else {
     if (!firstTime) {
@@ -90,9 +91,9 @@ Token::appendValue(const char *str)
 void
 Token::Print()
 {
-  ink_assert(name != NULL);
+  ink_assert(name != nullptr);
   printf(" (%s", name);
-  if (value != NULL) {
+  if (value != nullptr) {
     printf(", %s", value);
   }
   printf("),");
@@ -105,16 +106,16 @@ Token::Print()
  *   function calls in addition to the common length() and the debugging
  *   print() member functions.
  ***************************************************************************/
-TokenList::TokenList():length(0)
+TokenList::TokenList() : length(0)
 {
 }
 
 TokenList::~TokenList()
 {
-  Token *token = NULL;
+  Token *token = nullptr;
 
   while ((token = dequeue())) {
-    delete(token);
+    delete (token);
   }
 }
 
@@ -122,7 +123,7 @@ void
 TokenList::Print()
 {
   printf("\tRULE -->");
-  for (Token * token = first(); token; token = next(token)) {
+  for (Token *token = first(); token; token = next(token)) {
     token->Print();
   }
   printf("\n");
@@ -138,29 +139,33 @@ TokenList::Print()
  ***************************************************************************/
 
 Rule::Rule()
-  : tokenList(NULL),
-    m_filetype(TS_FNAME_UNDEFINED), m_filename(NULL), m_ruleStr(NULL), m_comment(NULL), m_errorHint(NULL)
+  : tokenList(nullptr),
+    m_filetype(TS_FNAME_UNDEFINED),
+    m_filename(nullptr),
+    m_ruleStr(nullptr),
+    m_comment(nullptr),
+    m_errorHint(nullptr)
 {
 }
 
 void
 Rule::setRuleStr(const char *str)
 {
-  ink_assert(m_comment == NULL);
+  ink_assert(m_comment == nullptr);
   m_ruleStr = ats_strdup(str);
 }
 
 void
 Rule::setComment(const char *str)
 {
-  ink_assert(m_comment == NULL);
+  ink_assert(m_comment == nullptr);
   m_comment = ats_strdup(str);
 }
 
 void
 Rule::setErrorHint(const char *str)
 {
-  ink_assert(m_errorHint == NULL);
+  ink_assert(m_errorHint == nullptr);
   m_errorHint = ats_strdup(str);
 }
 
@@ -187,45 +192,36 @@ Rule::Print()
 TokenList *
 Rule::parse(const char *const_rule, TSFileNameT filetype)
 {
-  char *rule = (char *) const_rule;
+  char *rule = (char *)const_rule;
   m_filetype = filetype;
 
   switch (m_filetype) {
-  case TS_FNAME_CACHE_OBJ:    /* cache.config */
+  case TS_FNAME_CACHE_OBJ: /* cache.config */
     return cacheParse(rule);
-  case TS_FNAME_CONGESTION:   /* congestion.config */
+  case TS_FNAME_CONGESTION: /* congestion.config */
     return congestionParse(rule, 1, 15);
-  case TS_FNAME_HOSTING:      /* hosting.config */
+  case TS_FNAME_HOSTING: /* hosting.config */
     return hostingParse(rule);
-  case TS_FNAME_ICP_PEER:     /* icp.config */
-    return icpParse(rule, 8, 8);
-  case TS_FNAME_IP_ALLOW:     /* ip_allow.config */
+  case TS_FNAME_IP_ALLOW: /* ip_allow.config */
     return ip_allowParse(rule);
-  case TS_FNAME_LOGS_XML:     /* logs_xml.config */
-    return logs_xmlParse(rule);
   case TS_FNAME_PARENT_PROXY: /* parent.config */
     return parentParse(rule);
-  case TS_FNAME_VOLUME:    /* volume.config */
+  case TS_FNAME_VOLUME: /* volume.config */
     return volumeParse(rule);
-  case TS_FNAME_PLUGIN:       /* plugin.config */
+  case TS_FNAME_PLUGIN: /* plugin.config */
     return pluginParse(rule);
-  case TS_FNAME_REMAP:        /* remap.config */
+  case TS_FNAME_REMAP: /* remap.config */
     return remapParse(rule);
-  case TS_FNAME_SOCKS:        /* socks.config */
+  case TS_FNAME_SOCKS: /* socks.config */
     return socksParse(rule);
-  case TS_FNAME_SPLIT_DNS:    /* splitdns.config */
+  case TS_FNAME_SPLIT_DNS: /* splitdns.config */
     return splitdnsParse(rule);
-  case TS_FNAME_STORAGE:      /* storage.config */
+  case TS_FNAME_STORAGE: /* storage.config */
     return storageParse(rule);
-  case TS_FNAME_UPDATE_URL:   /* update.config */
-    return updateParse(rule);
-  case TS_FNAME_VADDRS:       /* vaddrs.config */
-    return vaddrsParse(rule);
   default:
-    return NULL;
+    return nullptr;
   }
 }
-
 
 /**
  * arm_securityParse
@@ -236,8 +232,8 @@ Rule::arm_securityParse(char *rule)
   Tokenizer ruleTok(" \t");
   ruleTok.Initialize(rule);
   tok_iter_state ruleTok_state;
-  const char *tokenStr = ruleTok.iterFirst(&ruleTok_state);
-  Token *token = (Token *) NULL;
+  const char *tokenStr   = ruleTok.iterFirst(&ruleTok_state);
+  Token *token           = (Token *)nullptr;
   TokenList *m_tokenList = new TokenList();
 
   // ASSUMPTIONS:
@@ -245,31 +241,28 @@ Rule::arm_securityParse(char *rule)
   //   every token starts with a digit is a "value" or part of a "value"
   //   NO SPACE for port/ip range
   for (; tokenStr; tokenStr = ruleTok.iterNext(&ruleTok_state)) {
-
     // If 1st element is non-digit, it is a value
     if (!ParseRules::is_digit(tokenStr[0])) {
-
       // it is a name
-      if (token != (Token *) NULL) {
+      if (token != (Token *)nullptr) {
         // We have a token that hasn't been enqueue, enqueue it
         m_tokenList->enqueue(token);
       }
 
-      token = new Token(); // Create a new token
+      token = new Token();      // Create a new token
       token->setName(tokenStr); // Set token Name
-    } else if (token != (Token *) NULL) {
+    } else if (token != (Token *)nullptr) {
       // it is a value or part of a value
-      token->appendValue(tokenStr);     // ISA port# or IP; append to value
+      token->appendValue(tokenStr); // ISA port# or IP; append to value
     }
   }
 
-  if (token != (Token *) NULL) {        // Enqueue the last token -- we haven't done it yet.
+  if (token != (Token *)nullptr) { // Enqueue the last token -- we haven't done it yet.
     m_tokenList->enqueue(token);
   }
 
   return m_tokenList;
 }
-
 
 /**
  * cacheParse
@@ -284,33 +277,32 @@ Rule::cacheParse(char *rule, unsigned short minNumToken, unsigned short maxNumTo
   int numRuleTok = ruleTok.Initialize(rule);
   tok_iter_state ruleTok_state;
   const char *tokenStr = ruleTok.iterFirst(&ruleTok_state);
-  Token *token = NULL;
-  bool insideQuote = false;
+  Token *token         = nullptr;
+  bool insideQuote     = false;
   const char *newStr;
 
   // Sanity Check -- number of token
   if (numRuleTok < minNumToken) {
     setErrorHint("Expecting more space delimited tokens!");
-    return NULL;
+    return nullptr;
   }
   if (numRuleTok > maxNumToken) {
     setErrorHint("Expecting less space delimited tokens!");
-    return NULL;
+    return nullptr;
   }
   // Sanity Check -- no space before or after '='
   if (strstr(rule, " =")) {
     setErrorHint("Expected space before '='");
-    return NULL;
+    return nullptr;
   }
   if (strstr(rule, "= ")) {
     setErrorHint("Expected space after '='");
-    return NULL;
+    return nullptr;
   }
 
   TokenList *m_tokenList = new TokenList();
 
   for (; tokenStr; tokenStr = ruleTok.iterNext(&ruleTok_state)) {
-
     if (!insideQuote) {
       Tokenizer subruleTok("=");
       int numSubRuleTok = subruleTok.Initialize(tokenStr);
@@ -321,7 +313,7 @@ Rule::cacheParse(char *rule, unsigned short minNumToken, unsigned short maxNumTo
       if (numSubRuleTok < 2) {
         setErrorHint("'=' is expected in space-delimited token");
         delete m_tokenList;
-        return NULL;
+        return nullptr;
       }
 
       token = new Token();
@@ -350,27 +342,28 @@ Rule::cacheParse(char *rule, unsigned short minNumToken, unsigned short maxNumTo
         //          printf("%s 1\n", subtoken);
         token->appendValue(newStr);
       }
-      ats_free((void*)newStr);
+      ats_free((void *)newStr);
 
     } else {
       //      printf("%s 2\n", tokenStr);
       newStr = strtrim(tokenStr, '\"');
       token->appendValue(newStr);
-      ats_free((void*)newStr);
+      ats_free((void *)newStr);
       insideQuote = inQuote(tokenStr);
       if (insideQuote) {
         //              printf("enqueue\n");
         m_tokenList->enqueue(token);
+        token       = nullptr; // transfered ownership of token to the token list
         insideQuote = false;
       } else {
         insideQuote = true;
       }
     }
   }
+
+  delete token;
   return m_tokenList;
 }
-
-
 
 /**
  * congestionParse
@@ -393,44 +386,6 @@ Rule::hostingParse(char *rule)
   return cacheParse(rule, 2, 2);
 }
 
-
-/**
- * icpParse
- *   - mimic proxy/ICPConfig/icp_config_change_callback
- **/
-TokenList *
-Rule::icpParse(char *rule, unsigned short minNumToken, unsigned short maxNumToken)
-{
-  Tokenizer ruleTok(":");
-  int numRuleTok = ruleTok.Initialize(rule, ALLOW_EMPTY_TOKS);
-  tok_iter_state ruleTok_state;
-  const char *tokenStr = ruleTok.iterFirst(&ruleTok_state);
-  Token *token;
-  TokenList *m_tokenList;
-
-  // Sanity Check -- number of token
-  if (numRuleTok < minNumToken) {
-    setErrorHint("Expecting more ':' delimited tokens!");
-    return NULL;
-  }
-  if (numRuleTok > maxNumToken + 1 ||
-      (numRuleTok == maxNumToken + 1 && strspn(ruleTok[maxNumToken], " ") != strlen(ruleTok[maxNumToken]))) {
-    setErrorHint("Expecting less ':' delimited tokens!");
-    return NULL;
-  }
-
-
-  m_tokenList = new TokenList();
-  for (; tokenStr; tokenStr = ruleTok.iterNext(&ruleTok_state)) {
-    token = new Token();
-    token->setName(tokenStr);
-    m_tokenList->enqueue(token);
-  }
-
-  return m_tokenList;
-}
-
-
 /**
  * ip_allowParse
  **/
@@ -443,16 +398,14 @@ Rule::ip_allowParse(char *rule)
   return cacheParse(rule, 2, 2);
 }
 
-
 /**
  * logsParse
  **/
 TokenList *
 Rule::logsParse(char * /* rule ATS_UNUSED */)
 {
-  return NULL;
+  return nullptr;
 }
-
 
 /**
  * log_hostsParse
@@ -461,27 +414,16 @@ TokenList *
 Rule::log_hostsParse(char *rule)
 {
   if (strstr(rule, " ")) {
-    return NULL;
+    return nullptr;
   }
 
-  Token *token = new Token();
+  Token *token           = new Token();
   TokenList *m_tokenList = new TokenList();
   token->setName(rule);
   m_tokenList->enqueue(token);
 
   return m_tokenList;
 }
-
-
-/**
- * logs_xmlParse
- **/
-TokenList *
-Rule::logs_xmlParse(char * /* rule ATS_UNUSED */)
-{
-  return NULL;
-}
-
 
 /**
  * parentParse
@@ -492,7 +434,6 @@ Rule::parentParse(char *rule)
   return cacheParse(rule, 2);
 }
 
-
 /**
  * volumeParse
  **/
@@ -501,7 +442,6 @@ Rule::volumeParse(char *rule)
 {
   return cacheParse(rule, 3, 3);
 }
-
 
 /**
  * pluginParse
@@ -525,7 +465,6 @@ Rule::pluginParse(char *rule)
   return m_tokenList;
 }
 
-
 /**
  * remapParse
  **/
@@ -539,7 +478,7 @@ Rule::remapParse(char *rule)
 
   if ((numRuleTok != 3) && (numRuleTok != 4)) {
     setErrorHint("Expecting exactly 4 space delimited tokens");
-    return NULL;
+    return nullptr;
   }
 
   Token *token;
@@ -567,7 +506,6 @@ Rule::remapParse(char *rule)
   return m_tokenList;
 }
 
-
 /**
  * socksParse
  **/
@@ -578,20 +516,19 @@ Rule::socksParse(char *rule)
   int numRuleTok = ruleTok.Initialize(rule);
   tok_iter_state ruleTok_state;
   const char *tokenStr = ruleTok.iterFirst(&ruleTok_state);
-  Token *token = NULL;
-  bool insideQuote = false;
+  Token *token         = nullptr;
+  bool insideQuote     = false;
   const char *newStr;
-
 
   if (numRuleTok < 2) {
     setErrorHint("Expecting at least 2 space delimited tokens");
-    return NULL;
+    return nullptr;
   }
 
   TokenList *m_tokenList = new TokenList();
 
   /* check which rule type it is */
-  if (strcmp(tokenStr, "no_socks") == 0) {      /* TS_SOCKS_BYPASS rule type */
+  if (strcmp(tokenStr, "no_socks") == 0) { /* TS_SOCKS_BYPASS rule type */
     /* the token name = "no socks", the value = "list of ip addresses" */
     token = new Token();
     token->setName(tokenStr);
@@ -600,14 +537,14 @@ Rule::socksParse(char *rule)
       token->appendValue(tokenStr);
     }
     m_tokenList->enqueue(token);
-  } else if (strcmp(tokenStr, "auth") == 0) {   /* TS_SOCKS_AUTH rule type */
-    /* first token:  name = "auth", value = "u"
-       second token: name = <username>
-       third token:  name = <password> */
+  } else if (strcmp(tokenStr, "auth") == 0) { /* TS_SOCKS_AUTH rule type */
+                                              /* first token:  name = "auth", value = "u"
+                                                 second token: name = <username>
+                                                 third token:  name = <password> */
     token = new Token();
     token->setName(tokenStr);
     tokenStr = ruleTok.iterNext(&ruleTok_state);
-    token->setValue(tokenStr);  /* should be "u" authoriziation type */
+    token->setValue(tokenStr); /* should be "u" authoriziation type */
     m_tokenList->enqueue(token);
 
     /* create tokens for username and password */
@@ -617,7 +554,7 @@ Rule::socksParse(char *rule)
       m_tokenList->enqueue(token);
     }
 
-  } else {                      /* TS_SOCKS_MULTIPLE rule type */
+  } else { /* TS_SOCKS_MULTIPLE rule type */
     for (; tokenStr; tokenStr = ruleTok.iterNext(&ruleTok_state)) {
       /* token is a name-value pair separated with = sign */
       if (!insideQuote) {
@@ -629,7 +566,8 @@ Rule::socksParse(char *rule)
         // Every token must have a '=' sign
         if (numSubRuleTok < 2) {
           setErrorHint("'=' is expected in space-delimited token");
-          return NULL;
+          delete m_tokenList;
+          return nullptr;
         }
 
         token = new Token();
@@ -653,34 +591,35 @@ Rule::socksParse(char *rule)
           //          printf("!insideQuote: %s\n", subtoken);
           token->setValue(newStr);
           m_tokenList->enqueue(token);
+          token = nullptr; // transfered ownership of token to the token list
         } else {
           //          printf("insideQuote: %s\n", subtoken);
           //          printf("%s 1\n", subtoken);
           token->appendValue(newStr);
         }
-        ats_free((void*)newStr);
+        ats_free((void *)newStr);
 
       } else {
         //      printf("%s 2\n", tokenStr);
         newStr = strtrim(tokenStr, '\"');
         token->appendValue(newStr);
-        ats_free((void*)newStr);
+        ats_free((void *)newStr);
         insideQuote = inQuote(tokenStr);
         if (insideQuote) {
           //              printf("enqueue\n");
           m_tokenList->enqueue(token);
+          token       = nullptr; // transfered ownership of token to the token list
           insideQuote = false;
         } else {
           insideQuote = true;
         }
       }
-    }                           /* end for loop */
-
+    } /* end for loop */
   }
 
+  delete token;
   return m_tokenList;
 }
-
 
 /**
  * splitdnsParse
@@ -692,33 +631,32 @@ Rule::splitdnsParse(char *rule)
   int numRuleTok = ruleTok.Initialize(rule);
   tok_iter_state ruleTok_state;
   const char *tokenStr = ruleTok.iterFirst(&ruleTok_state);
-  Token *token = NULL;
-  bool insideQuote = false;
+  Token *token         = nullptr;
+  bool insideQuote     = false;
   const char *newStr;
 
   // Sanity Check -- number of token
   if (numRuleTok < 0) {
     setErrorHint("Expecting more space delimited tokens!");
-    return NULL;
+    return nullptr;
   }
   if (numRuleTok > 10) {
     setErrorHint("Expecting less space delimited tokens!");
-    return NULL;
+    return nullptr;
   }
   // Sanity Check -- no space before or after '='
   if (strstr(rule, " =")) {
     setErrorHint("Expected space before '='");
-    return NULL;
+    return nullptr;
   }
   if (strstr(rule, "= ")) {
     setErrorHint("Expected space after '='");
-    return NULL;
+    return nullptr;
   }
 
   TokenList *m_tokenList = new TokenList();
 
   for (; tokenStr; tokenStr = ruleTok.iterNext(&ruleTok_state)) {
-
     if (!insideQuote) {
       Tokenizer subruleTok("=");
       int numSubRuleTok = subruleTok.Initialize(tokenStr);
@@ -729,7 +667,7 @@ Rule::splitdnsParse(char *rule)
       if (numSubRuleTok < 2) {
         setErrorHint("'=' is expected in space-delimited token");
         delete m_tokenList;
-        return NULL;
+        return nullptr;
       }
 
       token = new Token();
@@ -742,21 +680,23 @@ Rule::splitdnsParse(char *rule)
       if (!insideQuote) {
         token->setValue(newStr);
         m_tokenList->enqueue(token);
+        token = nullptr; // transfered ownership of token to the token list
       } else {
         //          printf("%s 1\n", subtoken);
         token->appendValue(newStr);
       }
-      ats_free((void*)newStr);
+      ats_free((void *)newStr);
 
     } else {
       //            printf("%s 2\n", tokenStr);
       newStr = strtrim(tokenStr, '\"');
       token->appendValue(newStr);
-      ats_free((void*)newStr);
+      ats_free((void *)newStr);
       insideQuote = inQuote(tokenStr);
       if (insideQuote) {
         //              printf("enqueue\n");
         m_tokenList->enqueue(token);
+        token       = nullptr; // transfered ownership of token to the token list
         insideQuote = false;
       } else {
         insideQuote = true;
@@ -764,10 +704,10 @@ Rule::splitdnsParse(char *rule)
     }
   }
 
+  delete token;
   return m_tokenList;
   //  return cacheParse(rule, 2);
 }
-
 
 /**
  * updateParse
@@ -783,9 +723,9 @@ Rule::updateParse(char *rule)
   // NOTE: ignore white spaces before/after the '\'
   // There should only be 5 tokens; if there are 6 tokens, the
   // sixth token must be all white spaces
-  if (numRuleTok<5 || numRuleTok> 6 || (numRuleTok == 6 && strspn(ruleTok[5], " ") != strlen(ruleTok[5]))) {
+  if (numRuleTok < 5 || numRuleTok > 6 || (numRuleTok == 6 && strspn(ruleTok[5], " ") != strlen(ruleTok[5]))) {
     setErrorHint("Expecting exactly 5 '\' delimited tokens");
-    return NULL;
+    return nullptr;
   }
 
   Token *token;
@@ -799,33 +739,6 @@ Rule::updateParse(char *rule)
 
   return m_tokenList;
 }
-
-
-/**
- * vaddrsParse
- **/
-TokenList *
-Rule::vaddrsParse(char *rule)
-{
-  // ASSUMPTIONS:
-  //   UNIX: IP_address device subinterface
-  //   Win:  IP_address interface
-  Tokenizer ruleTok(" \t");
-  ruleTok.Initialize(rule);
-  tok_iter_state ruleTok_state;
-  const char *tokenStr = ruleTok.iterFirst(&ruleTok_state);
-  Token *token;
-  TokenList *m_tokenList = new TokenList();
-
-  for (; tokenStr; tokenStr = ruleTok.iterNext(&ruleTok_state)) {
-    token = new Token();
-    token->setName(tokenStr);
-    m_tokenList->enqueue(token);
-  }
-
-  return m_tokenList;
-}
-
 
 /**
  * storageParse
@@ -843,7 +756,7 @@ Rule::storageParse(char *rule)
 
   if ((numRuleTok != 1) && (numRuleTok != 2)) {
     setErrorHint("Expecting one or two tokens");
-    return NULL;
+    return nullptr;
   }
 
   Token *token;
@@ -852,7 +765,7 @@ Rule::storageParse(char *rule)
   // at least one token, anyways
   token = new Token();
   token->setName(tokenStr);
-  if (numRuleTok > 1) {         // numRulTok == 2
+  if (numRuleTok > 1) { // numRulTok == 2
     tokenStr = ruleTok.iterNext(&ruleTok_state);
     token->setValue(tokenStr);
   }
@@ -861,17 +774,16 @@ Rule::storageParse(char *rule)
   return m_tokenList;
 }
 
-
 /*
  * bool Rule::inQuote(char *str)
  *   Counts the number of quote found in "str"
  *   RETURN true  if "str" contains odd  number of quotes (")
  *          false if "str" contains even number of quotes (including zero)
  */
-bool Rule::inQuote(const char *str)
+bool
+Rule::inQuote(const char *str)
 {
-  unsigned
-    numQuote = 0;
+  unsigned numQuote = 0;
   for (const char *ptr = str; *ptr != '\0'; ptr++) {
     if (*ptr == '\"') {
       numQuote++;
@@ -879,7 +791,6 @@ bool Rule::inQuote(const char *str)
   }
   return (numQuote & 1);
 }
-
 
 /***************************************************************************
  * RuleList
@@ -890,8 +801,7 @@ bool Rule::inQuote(const char *str)
  *   continue parsing each rule.
  *   NOTE: a rule that spans more than one line would be a problem in here.
  ***************************************************************************/
-RuleList::RuleList()
- : length(0), m_filename(NULL)
+RuleList::RuleList() : length(0), m_filename(nullptr)
 {
   m_filetype = TS_FNAME_UNDEFINED;
 }
@@ -900,7 +810,7 @@ RuleList::~RuleList()
 {
   ats_free(m_filename);
 
-  Rule *rule = NULL;
+  Rule *rule = nullptr;
   while ((rule = dequeue())) {
     delete rule;
   }
@@ -910,7 +820,7 @@ void
 RuleList::Print()
 {
   printf("RULELIST-->\n");
-  for (Rule * rule = first(); rule; rule = next(rule)) {
+  for (Rule *rule = first(); rule; rule = next(rule)) {
     rule->Print();
   }
   printf("length: %u\n", length);
@@ -928,39 +838,30 @@ RuleList::parse(char *fileBuf, const char *filename)
   m_filename = ats_strdup(filename);
 
   if (strstr(filename, "cache.config")) {
-    m_filetype = TS_FNAME_CACHE_OBJ;   /* cache.config */
+    m_filetype = TS_FNAME_CACHE_OBJ; /* cache.config */
   } else if (strstr(filename, "congestion.config")) {
-    m_filetype = TS_FNAME_CONGESTION;  /* congestion.config */
+    m_filetype = TS_FNAME_CONGESTION; /* congestion.config */
   } else if (strstr(filename, "hosting.config")) {
-    m_filetype = TS_FNAME_HOSTING;     /* hosting.config */
-  } else if (strstr(filename, "icp.config")) {
-    m_filetype = TS_FNAME_ICP_PEER;    /* icp.config */
+    m_filetype = TS_FNAME_HOSTING; /* hosting.config */
   } else if (strstr(filename, "ip_allow.config")) {
-    m_filetype = TS_FNAME_IP_ALLOW;    /* ip_allow.config */
-  } else if (strstr(filename, "logs_xml.config")) {
-    m_filetype = TS_FNAME_LOGS_XML;    /* logs_xml.config */
+    m_filetype = TS_FNAME_IP_ALLOW; /* ip_allow.config */
   } else if (strstr(filename, "parent.config")) {
-    m_filetype = TS_FNAME_PARENT_PROXY;        /* parent.config */
+    m_filetype = TS_FNAME_PARENT_PROXY; /* parent.config */
   } else if (strstr(filename, "volume.config")) {
-    m_filetype = TS_FNAME_VOLUME;   /* volume.config */
+    m_filetype = TS_FNAME_VOLUME; /* volume.config */
   } else if (strstr(filename, "plugin.config")) {
-    m_filetype = TS_FNAME_PLUGIN;      /* plugin.config */
+    m_filetype = TS_FNAME_PLUGIN; /* plugin.config */
   } else if (strstr(filename, "remap.config")) {
-    m_filetype = TS_FNAME_REMAP;       /* remap.config */
+    m_filetype = TS_FNAME_REMAP; /* remap.config */
   } else if (strstr(filename, "socks.config")) {
-    m_filetype = TS_FNAME_SOCKS;       /* socks.config */
+    m_filetype = TS_FNAME_SOCKS; /* socks.config */
   } else if (strstr(filename, "splitdns.config")) {
-    m_filetype = TS_FNAME_SPLIT_DNS;   /* splitdns.config */
-  } else if (strstr(filename, "update.config")) {
-    m_filetype = TS_FNAME_UPDATE_URL;  /* update.config */
-  } else if (strstr(filename, "vaddrs.config")) {
-    m_filetype = TS_FNAME_VADDRS;      /* vaddrs.config */
+    m_filetype = TS_FNAME_SPLIT_DNS; /* splitdns.config */
   } else if (strstr(filename, "plugin.config")) {
-    m_filetype = TS_FNAME_UNDEFINED;   /* plugin.config */
+    m_filetype = TS_FNAME_UNDEFINED; /* plugin.config */
   } else if (strstr(filename, "storage.config")) {
-    m_filetype = TS_FNAME_STORAGE;     /* storage.config */
-  }
-  else {
+    m_filetype = TS_FNAME_STORAGE; /* storage.config */
+  } else {
     m_filetype = TS_FNAME_UNDEFINED;
   }
 
@@ -984,18 +885,12 @@ RuleList::parse(char *fileBuf, TSFileNameT filetype)
   tok_iter_state lineTok_state;
   const char *line;
 
-  if (filetype == TS_FNAME_LOGS_XML) {
-    printf("Yes Yes! XML!\n");
-    //      InkXmlConfigFile(NULL);
-    return;
-  }
-
   lineTok.Initialize(fileBuf);
   line = lineTok.iterFirst(&lineTok_state);
   while (line) {
     Rule *rule = new Rule();
 
-    if (line[0] == '#') {       // is this comment
+    if (line[0] == '#') { // is this comment
       rule->setComment(line);
     } else {
       TokenList *m_tokenList = rule->parse(line, filetype);
@@ -1003,9 +898,9 @@ RuleList::parse(char *fileBuf, TSFileNameT filetype)
         rule->setRuleStr(line);
         rule->tokenList = m_tokenList;
       } else {
-        //rule->setComment("## WARNING: The following configuration rule is invalid!");
+        // rule->setComment("## WARNING: The following configuration rule is invalid!");
         size_t error_rule_size = sizeof(char) * (strlen(line) + strlen("#ERROR: ") + 1);
-        char *error_rule = (char *)ats_malloc(error_rule_size);
+        char *error_rule       = (char *)ats_malloc(error_rule_size);
 
         snprintf(error_rule, error_rule_size, "#ERROR: %s", line);
         rule->setComment(error_rule);
@@ -1013,15 +908,14 @@ RuleList::parse(char *fileBuf, TSFileNameT filetype)
       }
     }
 
-    //rule->Print();
+    // rule->Print();
     this->enqueue(rule);
 
     // Get next line
     line = lineTok.iterNext(&lineTok_state);
   }
-  //this->Print();
+  // this->Print();
 }
-
 
 /***************************************************************************
  * General Routines
@@ -1032,10 +926,10 @@ RuleList::parse(char *fileBuf, TSFileNameT filetype)
 char *
 strtrim(char *str) {
   while(isspace(*str)) {
-	str++;
+        str++;
   }
   while(isspace(str[strlen(str)-1])) {
-	str[strlen(str)-1] = '\0';
+        str[strlen(str)-1] = '\0';
   }
   return str;
 }
@@ -1049,7 +943,7 @@ strtrim(const char *str_in, char chr)
 {
   char *str = ats_strdup(str_in);
 
-  char *str_ptr = str;          // so we can free str later if it changes
+  char *str_ptr = str; // so we can free str later if it changes
   while (*str == chr) {
     str++;
   }

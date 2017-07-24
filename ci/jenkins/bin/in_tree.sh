@@ -18,22 +18,18 @@
 
 # This does intentionally not run the regressions, it's primarily a "build" test
 
-# Test if we should enable CPPAPI (only 5.0 and later for now)
-enable_cppapi="--enable-cppapi"
-test "${JOB_NAME#*-4.2.x}" != "${JOB_NAME}" && enable_cppapi=""
-
 cd "${WORKSPACE}/src"
 
 autoreconf -fi
 ./configure \
+    --with-user=jenkins \
     --enable-ccache \
     --enable-werror \
     --enable-experimental-plugins \
-    ${enable_cppapi} \
     --enable-example-plugins \
     --enable-test-tools \
-    CORES=2
+    --enable-wccp
 
 ${ATS_MAKE} -j5 V=1
-${ATS_MAKE} check VERBOSE=Y
+#${ATS_MAKE} check VERBOSE=Y
 ${ATS_MAKE} clean
